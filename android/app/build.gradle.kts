@@ -13,6 +13,9 @@ android {
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
+
+        // 🔥 مهم جداً لحل flutter_local_notifications
+        isCoreLibraryDesugaringEnabled = true
     }
 
     kotlinOptions {
@@ -22,16 +25,16 @@ android {
     defaultConfig {
         applicationId = "com.example.clean_project"
 
-        minSdk = flutter.minSdkVersion   // 🔥 مهم جداً للإشعارات
-        targetSdk = flutter.targetSdkVersion
+        // 🔥 مهم للإشعارات
+        minSdk = 21
 
+        targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
     }
 
     buildTypes {
         release {
-            // مؤقت للتجربة
             signingConfig = signingConfigs.getByName("debug")
 
             isMinifyEnabled = false
@@ -42,4 +45,9 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    // 🔥 الحل الأساسي للخطأ
+    coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.0.4")
 }
