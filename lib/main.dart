@@ -15,7 +15,6 @@ Future<void> initNotifications() async {
 
   await notificationsPlugin.initialize(settings);
 
-  // 🔔 طلب إذن الإشعارات (Android 13+)
   await notificationsPlugin
       .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>()
@@ -24,8 +23,12 @@ Future<void> initNotifications() async {
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
   tz.initializeTimeZones();
+  tz.setLocalLocation(tz.getLocation('Africa/Cairo'));
+
   await initNotifications();
+
   runApp(const MyApp());
 }
 
@@ -35,60 +38,56 @@ class MyApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return const MaterialApp(
-      home: TestPage(),
       debugShowCheckedModeBanner: false,
+      home: HomePage(),
     );
   }
 }
 
-class TestPage extends StatelessWidget {
-  const TestPage({super.key});
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
 
-  Future<void> scheduleTestNotification() async {
+  Future<void> testNotification() async {
     final now = tz.TZDateTime.now(tz.local);
-    final scheduled = now.add(const Duration(seconds: 10));
+    final scheduled = now.add(const Duration(seconds: 5));
 
     await notificationsPlugin.zonedSchedule(
-      999,
+      1,
       'اختبار 🔔',
-      'لو وصلتك الرسالة دي يبقى الإشعارات شغالة تمام',
+      'الإشعار شغال تمام',
       scheduled,
       const NotificationDetails(
         android: AndroidNotificationDetails(
           'test_channel',
-          'Test Notifications',
+          'Test Channel',
           importance: Importance.max,
           priority: Priority.high,
         ),
       ),
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-      uiLocalNotificationDateInterpretation:
-          UILocalNotificationDateInterpretation.absoluteTime,
     );
   }
 
-  Future<void> cancelNotification() async {
-    await notificationsPlugin.cancel(999);
+  Future<void> cancel() async {
+    await notificationsPlugin.cancel(1);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        title: const Text('تجربة الإشعارات'),
-      ),
+      appBar: AppBar(title: const Text('Notifications Test')),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             ElevatedButton(
-              onPressed: scheduleTestNotification,
-              child: const Text('جرب إشعار بعد دقيقة 🔔'),
+              onPressed: testNotification,
+              child: const Text('إشعار بعد 5 ثواني 🔔'),
             ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: cancelNotification,
-              child: const Text('إلغاء الإشعار ❌'),
+              onPressed: cancel,
+              child: const Text('إلغاء ❌'),
             ),
           ],
         ),
