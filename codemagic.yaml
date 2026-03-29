@@ -1,32 +1,41 @@
 workflows:
   android-workflow:
-    name: Android Build
+    name: Flutter Android Build
     max_build_duration: 60
 
     environment:
       flutter: stable
       java: 17
 
+    cache:
+      cache_paths:
+        - ~/.pub-cache
+        - android/.gradle
+
     scripts:
-      - name: Clean project
+      - name: Clean Flutter
         script: |
           flutter clean
 
-      - name: Get Flutter packages
+      - name: Get packages
         script: |
           flutter pub get
 
-      - name: Clean Android
+      - name: Clean Android Gradle
         script: |
           cd android
           ./gradlew clean
           cd ..
 
-      - name: Analyze project
+      - name: Fix dependencies (safety step)
+        script: |
+          flutter pub deps
+
+      - name: Analyze (optional)
         script: |
           flutter analyze || true
 
-      - name: Build APK
+      - name: Build APK (Release)
         script: |
           flutter build apk --release
 
