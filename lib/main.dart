@@ -1,37 +1,97 @@
-name: e3dady
-description: تطبيق اعدادي للصلاة
-publish_to: 'none'
+import 'package:flutter/material.dart';
+import 'package:flutter_local_notifications/flutter_local_notifications.dart';
+import 'package:timezone/data/latest.dart' as tz;
+import 'package:timezone/timezone.dart' as tz;
 
-version: 1.0.0+1
+final FlutterLocalNotificationsPlugin notificationsPlugin =
+    FlutterLocalNotificationsPlugin();
 
-environment:
-  sdk: ">=3.0.0 <4.0.0"
+Future<void> initNotifications() async {
+  const AndroidInitializationSettings androidSettings =
+      AndroidInitializationSettings('@mipmap/ic_launcher');
 
-dependencies:
-  flutter:
-    sdk: flutter
+  const InitializationSettings settings =
+      InitializationSettings(android: androidSettings);
 
-  cupertino_icons: ^1.0.2
-  shared_preferences: ^2.2.2
+  await notificationsPlugin.initialize(settings);
 
-  # 🔥 نثبت نسخة مستقرة عشان مفيش Errors
-  flutter_local_notifications: ^16.3.2
+  await notificationsPlugin
+      .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin>()
+      ?.requestNotificationsPermission();
+}
 
-  timezone: ^0.9.2
+void main() async {
+  WidgetsFlutterBinding.ensureInitialized();
 
-dev_dependencies:
-  flutter_test:
-    sdk: flutter
+  tz.initializeTimeZones();
+  tz.setLocalLocation(tz.getLocation('Africa/Cairo'));
 
-  flutter_lints: ^3.0.0
-  flutter_launcher_icons: ^0.13.1
+  await initNotifications();
 
-flutter:
-  uses-material-design: true
+  runApp(const MyApp());
+}
 
-flutter_icons:
-  android: true
-  ios: true
-  image_path: "assets/icon.png"
-  adaptive_icon_background: "#2196F3"
-  adaptive_icon_foreground: "assets/icon.png"
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const MaterialApp(
+      debugShowCheckedModeBanner: false,
+      home: HomePage(),
+    );
+  }
+}
+
+class HomePage extends StatelessWidget {
+  const HomePage({super.key});
+
+  Future<void> testNotification() async {
+    final now = tz.TZDateTime.now(tz.local);
+    final scheduled = now.add(const Duration(seconds: 5));
+
+    await notificationsPlugin.zonedSchedule(
+      1,
+      'اختبار 🔔',
+      'الإشعار شغال تمام',
+      scheduled,
+      const NotificationDetails(
+        android: AndroidNotificationDetails(
+          'test_channel',
+          'Test Channel',
+          importance: Importance.max,
+          priority: Priority.high,
+        ),
+      ),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+    );
+  }
+
+  Future<void> cancelNotification() async {
+    await notificationsPlugin.cancel(1);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('تجربة الإشعارات')),
+      body: Center(
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            ElevatedButton(
+              onPressed: testNotification,
+              child: const Text('إشعار بعد 5 ثواني 🔔'),
+            ),
+            const SizedBox(height: 20),
+            ElevatedButton(
+              onPressed: cancelNotification,
+              child: const Text('إلغاء ❌'),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
