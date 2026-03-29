@@ -15,6 +15,7 @@ Future<void> initNotifications() async {
 
   await notificationsPlugin.initialize(settings);
 
+  // Android 13+
   await notificationsPlugin
       .resolvePlatformSpecificImplementation<
           AndroidFlutterLocalNotificationsPlugin>()
@@ -64,18 +65,23 @@ class HomePage extends StatelessWidget {
           priority: Priority.high,
         ),
       ),
+
       androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+
+      // 🔥 مهم جدًا في الإصدار الجديد
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
     );
   }
 
-  Future<void> cancel() async {
+  Future<void> cancelNotification() async {
     await notificationsPlugin.cancel(1);
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(title: const Text('Notifications Test')),
+      appBar: AppBar(title: const Text('تجربة الإشعارات')),
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -86,7 +92,7 @@ class HomePage extends StatelessWidget {
             ),
             const SizedBox(height: 20),
             ElevatedButton(
-              onPressed: cancel,
+              onPressed: cancelNotification,
               child: const Text('إلغاء ❌'),
             ),
           ],
