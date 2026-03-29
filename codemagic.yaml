@@ -5,11 +5,22 @@ workflows:
 
     environment:
       flutter: stable
+      java: 17
 
     scripts:
+      - name: Clean project
+        script: |
+          flutter clean
+
       - name: Get Flutter packages
         script: |
           flutter pub get
+
+      - name: Clean Android
+        script: |
+          cd android
+          ./gradlew clean
+          cd ..
 
       - name: Analyze project
         script: |
