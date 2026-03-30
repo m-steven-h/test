@@ -1,0 +1,41 @@
+# Flutter/Dart
+*.lock
+.flutter-plugins
+.flutter-plugins-dependencies
+.dart_tool/
+.pub/
+build/
+packages/
+pubspec.lock
+
+# Android
+android/local.properties
+android/app/src/main/gen/
+android/app/src/main/res/drawable/
+android/.gradle/
+android/captures/
+android/gradlew
+android/gradlew.bat
+android/gradle/wrapper/gradle-wrapper.jar
+
+# iOS
+ios/Flutter/Generated.xcconfig
+ios/Flutter/flutter_export_environment.sh
+ios/Podfile.lock
+ios/Pods/
+ios/.symlinks/
+
+# macOS
+macos/Flutter/GeneratedPluginRegistrant.swift
+macos/Flutter/ephemeral/
+
+# Windows
+windows/flutter/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+.DS_Store
