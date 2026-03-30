@@ -1,13 +1,24 @@
-scripts:
-  - name: Build Android APK
-    script: |
-      # إعداد NDK
-      echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
-      echo "ndk.dir=$ANDROID_NDK" >> android/local.properties
+workflows:
+  build-android:
+    name: Build Android APK
+    environment:
+      flutter: stable
+      android_sdk: 35
+      ndk: 25.2.9519653  # ✅ تحديد NDK
+    scripts:
+      - name: Configure local.properties
+        script: |
+          echo "flutter.sdk=$FLUTTER_ROOT" > android/local.properties
+          echo "sdk.dir=$ANDROID_SDK" >> android/local.properties
+          echo "ndk.dir=$ANDROID_NDK" >> android/local.properties
       
-      # بناء التطبيق
-      cd android
-      chmod +x gradlew
-      ./gradlew clean
-      cd ..
-      flutter build apk --release
+      - name: Clean and get packages
+        script: |
+          flutter clean
+          flutter pub get
+      
+      - name: Build APK
+        script: |
+          flutter build apk --release
+    artifacts:
+      - build/app/outputs/flutter-apk/*.apk
