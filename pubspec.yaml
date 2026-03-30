@@ -1,4 +1,4 @@
-name: e3dady_app
+name: e3dady
 description: تطبيق اعدادي للصلاة
 publish_to: 'none'
 
@@ -12,11 +12,14 @@ dependencies:
     sdk: flutter
 
   cupertino_icons: ^1.0.2
+  shared_preferences: ^2.2.0
+  flutter_local_notifications: ^18.0.0
+  workmanager: ^0.5.2
+  timezone: ^0.10.0
 
 dev_dependencies:
   flutter_test:
     sdk: flutter
-
   flutter_lints: ^3.0.0
   flutter_launcher_icons: ^0.13.1
 
@@ -26,7 +29,6 @@ flutter:
   assets:
     - assets/icon.png
 
-# 🔥 إعداد اللوجو
 flutter_icons:
   android: true
   ios: true
