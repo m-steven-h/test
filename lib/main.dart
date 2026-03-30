@@ -7,30 +7,31 @@ import 'package:workmanager/workmanager.dart';
 import 'package:timezone/timezone.dart' as tz;
 import 'package:timezone/data/latest.dart' as tz;
 
-// ✅ دالة الخلفية للإشعارات (يجب أن تكون خارج الـ main)
+// ✅ دالة الخلفية للإشعارات
 @pragma('vm:entry-point')
 void callbackDispatcher() {
   Workmanager().executeTask((task, inputData) async {
     if (task == "scheduleWeeklyPrayerNotification") {
-      // ✅ عند تنفيذ المهمة، نقوم بجدولة الإشعار الأسبوعي
-      //    هذا يضمن أن الإشعار سيتم إعادة جدولته في كل مرة
       await scheduleWeeklyNotification();
     }
     return Future.value(true);
   });
 }
 
-// ✅ دالة عرض الإشعار الفوري
+// ✅ دالة عرض الإشعار
 Future<void> showWeeklyNotification() async {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
-  const AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+  final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
     'prayer_channel',
     'تذكير الصلاة',
-    channelDescription: 'تذكير صلاة اعدادي',
+    channelDescription: 'تذكير أسبوعي للصلاة',
     importance: Importance.high,
     priority: Priority.high,
+    sound: RawResourceAndroidNotificationSound('notification_sound'),
+    enableVibration: true,
+    playSound: true,
   );
 
   const NotificationDetails platformDetails =
@@ -38,67 +39,95 @@ Future<void> showWeeklyNotification() async {
 
   await flutterLocalNotificationsPlugin.show(
     0,
-    'خدمة اعدادي',
-    'الصلاة بدات اطلع خدمتك',
+    '🕊️ تذكير بالصلاة',
+    'حان وقت الصلاة - يوم الجمعة الساعة 3:30 عصراً',
     platformDetails,
   );
 }
 
-// ✅ دالة جدولة الإشعار الأسبوعي (سيتم استدعاؤها مرة عند بدء التشغيل، ثم من الخلفية)
+// ✅ دالة جدولة الإشعار الأسبوعي (مع تحسينات)
 Future<void> scheduleWeeklyNotification() async {
-  // تأكد من تهيئة المناطق الزمنية
-  tz.initializeTimeZones();
-  final location = tz.getLocation('Africa/Cairo');
+  try {
+    // تهيئة المناطق الزمنية
+    tz.initializeTimeZones();
+    
+    final location = tz.getLocation('Africa/Cairo');
 
-  final now = tz.TZDateTime.now(location);
-  
-  // حساب تاريخ يوم الجمعة القادم في الساعة 3:30 عصراً
-  DateTime nextFriday = now.toLocal();
-  int daysUntilFriday = (DateTime.friday - now.weekday) % 7;
-  if (daysUntilFriday == 0 && now.hour >= 15 && now.minute >= 30) {
-    // إذا كان اليوم هو الجمعة ولكن الوقت تجاوز 3:30، نذهب للجمعة القادمة
-    daysUntilFriday = 7;
+    final now = tz.TZDateTime.now(location);
+    
+    DateTime nextFriday = now.toLocal();
+    int daysUntilFriday = (DateTime.friday - now.weekday) % 7;
+    if (daysUntilFriday == 0 && now.hour >= 15 && now.minute >= 30) {
+      daysUntilFriday = 7;
+    }
+    nextFriday = nextFriday.add(Duration(days: daysUntilFriday));
+    
+    final tz.TZDateTime scheduledDate = tz.TZDateTime(
+      location,
+      nextFriday.year,
+      nextFriday.month,
+      nextFriday.day,
+      15,
+      30,
+    );
+
+    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+        FlutterLocalNotificationsPlugin();
+
+    final AndroidNotificationDetails androidDetails = AndroidNotificationDetails(
+      'prayer_channel',
+      'تذكير الصلاة',
+      channelDescription: 'تذكير أسبوعي للصلاة',
+      importance: Importance.high,
+      priority: Priority.high,
+      sound: RawResourceAndroidNotificationSound('notification_sound'),
+      enableVibration: true,
+      playSound: true,
+    );
+
+    // ✅ إلغاء الإشعار الموجود قبل إعادة جدولته (يمنع التصادم)
+    await flutterLocalNotificationsPlugin.cancel(1);
+    
+    await flutterLocalNotificationsPlugin.zonedSchedule(
+      1,
+      '🕊️ تذكير بالصلاة',
+      'حان وقت الصلاة - يوم الجمعة الساعة 3:30 عصراً',
+      scheduledDate,
+      NotificationDetails(android: androidDetails),
+      androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
+      matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime,
+      uiLocalNotificationDateInterpretation:
+          UILocalNotificationDateInterpretation.absoluteTime,
+    );
+  } catch (e) {
+    debugPrint('Error scheduling notification: $e');
   }
-  nextFriday = nextFriday.add(Duration(days: daysUntilFriday));
-  
-  final tz.TZDateTime scheduledDate = tz.TZDateTime(
-    location,
-    nextFriday.year,
-    nextFriday.month,
-    nextFriday.day,
-    15,
-    30,
-  );
-
-  final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
-      FlutterLocalNotificationsPlugin();
-
-  // نستخدم `zonedSchedule` مع `matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime`
-  // هذا يضمن تكرار الإشعار كل أسبوع في نفس اليوم والوقت.
-  await flutterLocalNotificationsPlugin.zonedSchedule(
-    1,
-    'خدمة اعدادي',
-    'الصلاة بدات اطلع خدمتك',
-    scheduledDate,
-    const NotificationDetails(
-      android: AndroidNotificationDetails(
-        'prayer_channel',
-        'تذكير الصلاة',
-        importance: Importance.high,
-        priority: Priority.high,
-      ),
-    ),
-    androidScheduleMode: AndroidScheduleMode.exactAllowWhileIdle,
-    matchDateTimeComponents: DateTimeComponents.dayOfWeekAndTime, // 🔁 مفتاح التكرار الأسبوعي
-    uiLocalNotificationDateInterpretation:
-        UILocalNotificationDateInterpretation.absoluteTime,
-  );
 }
 
-void main() async {
-  WidgetsFlutterBinding.ensureInitialized();
+// ✅ دالة طلب إذن الإشعارات
+Future<void> requestNotificationPermission() async {
+  try {
+    final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
+        FlutterLocalNotificationsPlugin();
+    
+    final bool? isEnabled = await flutterLocalNotificationsPlugin
+        .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin>()
+        ?.areNotificationsEnabled();
+    
+    if (isEnabled == false) {
+      await flutterLocalNotificationsPlugin
+          .resolvePlatformSpecificImplementation<
+              AndroidFlutterLocalNotificationsPlugin>()
+          ?.requestNotificationsPermission();
+    }
+  } catch (e) {
+    debugPrint('Error requesting notification permission: $e');
+  }
+}
 
-  // ✅ تهيئة الإشعارات المحلية
+// ✅ تهيئة الإشعارات مع معالجة الأخطاء
+Future<FlutterLocalNotificationsPlugin> initializeNotifications() async {
   final FlutterLocalNotificationsPlugin flutterLocalNotificationsPlugin =
       FlutterLocalNotificationsPlugin();
 
@@ -109,39 +138,69 @@ void main() async {
       InitializationSettings(android: androidSettings);
 
   await flutterLocalNotificationsPlugin.initialize(initSettings);
+  
+  return flutterLocalNotificationsPlugin;
+}
 
-  // ✅ طلب إذن الإشعارات (لأندرويد 13+)
-  if (await flutterLocalNotificationsPlugin
-          .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-          ?.areNotificationsEnabled() ??
-      false) {
-    // الإذن موجود بالفعل
-  } else {
-    await flutterLocalNotificationsPlugin
-        .resolvePlatformSpecificImplementation<
-              AndroidFlutterLocalNotificationsPlugin>()
-        ?.requestNotificationsPermission();
-  }
-
-  // ✅ تشغيل WorkManager فقط على Android (وليس على Web)
+// ✅ تهيئة WorkManager
+Future<void> initializeWorkManager() async {
   if (!kIsWeb) {
     await Workmanager().initialize(callbackDispatcher, isInDebugMode: false);
-    // تسجيل مهمة دورية (Periodic Task) تحدث كل 24 ساعة على الأقل.
-    // هذا يضمن أن التطبيق سيحاول إعادة جدولة الإشعار بشكل منتظم
-    // حتى لو تم إلغاء الإشعار الأصلي من قبل النظام.
     await Workmanager().registerPeriodicTask(
       "weeklyPrayerTask",
       "scheduleWeeklyPrayerNotification",
-      // أقل فترة مسموحة هي 15 دقيقة أثناء التطوير، ويفضل 24 ساعة أو أكثر للإصدار النهائي
-      frequency: const Duration(hours: 24), 
+      frequency: const Duration(hours: 24),
       initialDelay: const Duration(seconds: 10),
     );
   }
-  
-  // جدولة الإشعار لأول مرة عند بدء تشغيل التطبيق
-  await scheduleWeeklyNotification();
+}
 
+// ✅ دالة التحقق من جدولة الإشعار (لتجنب الجدولة المتكررة)
+Future<bool> isNotificationScheduled() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final lastScheduledDate = prefs.getString('last_notification_scheduled');
+    final today = DateTime.now().toIso8601String().substring(0, 10);
+    
+    if (lastScheduledDate == today) {
+      return true; // تم الجدولة اليوم بالفعل
+    }
+    
+    await prefs.setString('last_notification_scheduled', today);
+    return false;
+  } catch (e) {
+    return false;
+  }
+}
+
+// ✅ MAIN FUNCTION مع تحسين معالجة الأخطاء
+void main() async {
+  // تأكد من تهيئة WidgetsFlutterBinding أولاً
+  WidgetsFlutterBinding.ensureInitialized();
+  
+  // تهيئة المناطق الزمنية مرة واحدة فقط
+  tz.initializeTimeZones();
+
+  try {
+    // تهيئة الإشعارات
+    await initializeNotifications();
+    
+    // تهيئة WorkManager
+    await initializeWorkManager();
+    
+    // ✅ التحقق مما إذا كان الإشعار قد تم جدولته بالفعل اليوم
+    final alreadyScheduled = await isNotificationScheduled();
+    
+    if (!alreadyScheduled) {
+      // جدولة الإشعار فقط إذا لم يتم جدولته اليوم
+      await scheduleWeeklyNotification();
+    }
+  } catch (e) {
+    // تسجيل الخطأ ولكن لا تمنع تشغيل التطبيق
+    debugPrint('Error during initialization: $e');
+  }
+  
+  // ✅ تشغيل التطبيق دائمًا بغض النظر عن أخطاء التهيئة
   runApp(const MyApp());
 }
 
@@ -155,32 +214,52 @@ class MyApp extends StatefulWidget {
 class _MyAppState extends State<MyApp> {
   ThemeMode _themeMode = ThemeMode.dark;
   double _fontSize = 30.0;
+  bool _isLoading = true;
 
   @override
   void initState() {
     super.initState();
     _loadSettings();
-  }
-
-  Future<void> _loadSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    setState(() {
-      final isDark = prefs.getBool('isDark') ?? true;
-      _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
-      _fontSize = prefs.getDouble('fontSize') ?? 30.0;
+    // طلب إذن الإشعارات بعد تحميل الواجهة
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      requestNotificationPermission();
     });
   }
 
+  Future<void> _loadSettings() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (mounted) {
+        setState(() {
+          final isDark = prefs.getBool('isDark') ?? true;
+          _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+          _fontSize = prefs.getDouble('fontSize') ?? 30.0;
+          _isLoading = false;
+        });
+      }
+    } catch (e) {
+      debugPrint('Error loading settings: $e');
+      if (mounted) {
+        setState(() {
+          _isLoading = false;
+        });
+      }
+    }
+  }
+
   Future<void> _saveSettings() async {
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setBool('isDark', _themeMode == ThemeMode.dark);
-    await prefs.setDouble('fontSize', _fontSize);
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setBool('isDark', _themeMode == ThemeMode.dark);
+      await prefs.setDouble('fontSize', _fontSize);
+    } catch (e) {
+      debugPrint('Error saving settings: $e');
+    }
   }
 
   void toggleTheme() {
     setState(() {
-      _themeMode =
-          _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
+      _themeMode = _themeMode == ThemeMode.dark ? ThemeMode.light : ThemeMode.dark;
       _saveSettings();
     });
   }
@@ -194,6 +273,18 @@ class _MyAppState extends State<MyApp> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isLoading) {
+      return MaterialApp(
+        home: Scaffold(
+          body: Center(
+            child: CircularProgressIndicator(
+              color: Colors.blue,
+            ),
+          ),
+        ),
+      );
+    }
+    
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       themeMode: _themeMode,
@@ -257,225 +348,130 @@ class PrepPage extends StatelessWidget {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 const SizedBox(height: 20),
-                TweenAnimationBuilder<double>(
-                  tween: Tween<double>(begin: 0, end: 1),
-                  duration: const Duration(milliseconds: 800),
-                  builder: (context, value, child) {
-                    return Transform.translate(
-                      offset: Offset(0, 30 * (1 - value)),
-                      child: Opacity(
-                        opacity: value,
-                        child: Column(
-                          children: [
-                            Text(
-                              "خدمة",
-                              style: TextStyle(
-                                fontSize: 56,
-                                fontWeight: FontWeight.w300,
-                                color: isDark ? Colors.white70 : Colors.black54,
-                                letterSpacing: 2,
+                Column(
+                  children: [
+                    Text(
+                      "خدمة",
+                      style: TextStyle(
+                        fontSize: 56,
+                        fontWeight: FontWeight.w300,
+                        color: isDark ? Colors.white70 : Colors.black54,
+                        letterSpacing: 2,
+                      ),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      "اعدادي",
+                      style: TextStyle(
+                        fontSize: 48,
+                        fontWeight: FontWeight.bold,
+                        color: isDark ? Colors.white : Colors.black,
+                        shadows: [
+                          Shadow(
+                            blurRadius: 20,
+                            color: isDark
+                                ? Colors.white24
+                                : Colors.blue.shade200,
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 60),
+                Column(
+                  children: [
+                    Container(
+                      width: double.infinity,
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(25),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.blue.withOpacity(0.4),
+                            blurRadius: 20,
+                            offset: const Offset(0, 10),
+                          ),
+                        ],
+                      ),
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue,
+                          foregroundColor: Colors.white,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          elevation: 0,
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => PrayerTimeSelectionPage(
+                                isDark: isDark,
+                                fontSize: fontSize,
+                                updateFontSize: updateFontSize,
                               ),
                             ),
-                            const SizedBox(height: 10),
+                          );
+                        },
+                        child: const Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            Icon(Icons.play_arrow, size: 28),
+                            SizedBox(width: 12),
                             Text(
-                              "اعدادي",
+                              "ابدأ الصلاة",
                               style: TextStyle(
-                                fontSize: 48,
+                                fontSize: 22,
                                 fontWeight: FontWeight.bold,
-                                color: isDark ? Colors.white : Colors.black,
-                                shadows: [
-                                  Shadow(
-                                    blurRadius: 20,
-                                    color: isDark
-                                        ? Colors.white24
-                                        : Colors.blue.shade200,
-                                  ),
-                                ],
                               ),
                             ),
                           ],
                         ),
                       ),
-                    );
-                  },
-                ),
-                const SizedBox(height: 60),
-                Column(
-                  children: [
-                    TweenAnimationBuilder<double>(
-                      tween: Tween<double>(begin: 0, end: 1),
-                      duration: const Duration(milliseconds: 800),
-                      builder: (context, value, child) {
-                        return Transform.translate(
-                          offset: Offset(0, 50 * (1 - value)),
-                          child: Opacity(
-                            opacity: value,
-                            child: Container(
-                              width: double.infinity,
-                              decoration: BoxDecoration(
-                                borderRadius: BorderRadius.circular(25),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: Colors.blue.withOpacity(0.4),
-                                    blurRadius: 20,
-                                    offset: const Offset(0, 10),
-                                  ),
-                                ],
-                              ),
-                              child: ElevatedButton(
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.blue,
-                                  foregroundColor: Colors.white,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 18,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(25),
-                                  ),
-                                  elevation: 0,
-                                ),
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    PageRouteBuilder(
-                                      pageBuilder: (
-                                        context,
-                                        animation,
-                                        secondaryAnimation,
-                                      ) =>
-                                          PrayerTimeSelectionPage(
-                                        isDark: isDark,
-                                        fontSize: fontSize,
-                                        updateFontSize: updateFontSize,
-                                      ),
-                                      transitionsBuilder: (
-                                        context,
-                                        animation,
-                                        secondaryAnimation,
-                                        child,
-                                      ) {
-                                        const begin = Offset(1.0, 0.0);
-                                        const end = Offset.zero;
-                                        const curve = Curves.easeInOutCubic;
-                                        var tween = Tween(
-                                          begin: begin,
-                                          end: end,
-                                        ).chain(CurveTween(curve: curve));
-                                        return SlideTransition(
-                                          position: animation.drive(tween),
-                                          child: child,
-                                        );
-                                      },
-                                      transitionDuration: const Duration(
-                                        milliseconds: 500,
-                                      ),
-                                    ),
-                                  );
-                                },
-                                child: const Row(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Icon(Icons.play_arrow, size: 28),
-                                    SizedBox(width: 12),
-                                    Text(
-                                      "ابدأ الصلاة",
-                                      style: TextStyle(
-                                        fontSize: 22,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ],
-                                ),
-                              ),
-                            ),
-                          ),
-                        );
-                      },
                     ),
                     const SizedBox(height: 20),
-                    TweenAnimationBuilder<double>(
-                      tween: Tween<double>(begin: 0, end: 1),
-                      duration: const Duration(milliseconds: 800),
-                      builder: (context, value, child) {
-                        return Transform.translate(
-                          offset: Offset(0, 70 * (1 - value)),
-                          child: Opacity(
-                            opacity: value,
-                            child: Container(
-                              width: double.infinity,
-                              child: OutlinedButton.icon(
-                                style: OutlinedButton.styleFrom(
-                                  foregroundColor:
-                                      isDark ? Colors.white : Colors.black,
-                                  padding: const EdgeInsets.symmetric(
-                                    vertical: 18,
-                                  ),
-                                  shape: RoundedRectangleBorder(
-                                    borderRadius: BorderRadius.circular(25),
-                                  ),
-                                  side: BorderSide(
-                                    color: isDark
-                                        ? Colors.white24
-                                        : Colors.black26,
-                                    width: 1.5,
-                                  ),
-                                ),
-                                onPressed: () {
-                                  Navigator.push(
-                                    context,
-                                    PageRouteBuilder(
-                                      pageBuilder: (
-                                        context,
-                                        animation,
-                                        secondaryAnimation,
-                                      ) =>
-                                          SettingsPage(
-                                        isDark: isDark,
-                                        fontSize: fontSize,
-                                        toggleTheme: toggleTheme,
-                                        updateFontSize: updateFontSize,
-                                      ),
-                                      transitionsBuilder: (
-                                        context,
-                                        animation,
-                                        secondaryAnimation,
-                                        child,
-                                      ) {
-                                        const begin = Offset(0.0, 1.0);
-                                        const end = Offset.zero;
-                                        const curve = Curves.easeInOutCubic;
-                                        var tween = Tween(
-                                          begin: begin,
-                                          end: end,
-                                        ).chain(CurveTween(curve: curve));
-                                        return SlideTransition(
-                                          position: animation.drive(tween),
-                                          child: child,
-                                        );
-                                      },
-                                      transitionDuration: const Duration(
-                                        milliseconds: 500,
-                                      ),
-                                    ),
-                                  );
-                                },
-                                icon: Icon(
-                                  Icons.settings_outlined,
-                                  size: 26,
-                                  color: Colors.blue,
-                                ),
-                                label: const Text(
-                                  "الإعدادات",
-                                  style: TextStyle(
-                                    fontSize: 20,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
+                    Container(
+                      width: double.infinity,
+                      child: OutlinedButton.icon(
+                        style: OutlinedButton.styleFrom(
+                          foregroundColor: isDark ? Colors.white : Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 18),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(25),
+                          ),
+                          side: BorderSide(
+                            color: isDark ? Colors.white24 : Colors.black26,
+                            width: 1.5,
+                          ),
+                        ),
+                        onPressed: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => SettingsPage(
+                                isDark: isDark,
+                                fontSize: fontSize,
+                                toggleTheme: toggleTheme,
+                                updateFontSize: updateFontSize,
                               ),
                             ),
+                          );
+                        },
+                        icon: Icon(
+                          Icons.settings_outlined,
+                          size: 26,
+                          color: Colors.blue,
+                        ),
+                        label: const Text(
+                          "الإعدادات",
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.w600,
                           ),
-                        );
-                      },
+                        ),
+                      ),
                     ),
                   ],
                 ),
@@ -508,23 +504,17 @@ class PrayerTimeSelectionPage extends StatelessWidget {
     final List<Map<String, dynamic>> prayerTimes = [
       {
         'title': 'صلاة باكر',
-        'subtitle': '',
         'icon': Icons.wb_sunny,
-        'color': Colors.blue,
         'description': '',
       },
       {
         'title': 'صلاة الغروب',
-        'subtitle': '',
         'icon': Icons.wb_twighlight,
-        'color': Colors.blue,
         'description': 'صلاة الساعة الحادية عشر',
       },
       {
         'title': 'صلاة النوم',
-        'subtitle': '',
         'icon': Icons.nightlight_round,
-        'color': Colors.blue,
         'description': 'صلاة الساعة الثانية عشر',
       },
     ];
@@ -548,23 +538,20 @@ class PrayerTimeSelectionPage extends StatelessWidget {
                     ),
                   ),
                   const Spacer(),
-                  MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.pop(context);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: isDark ? Colors.grey[800] : Colors.grey[100],
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        child: Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.blue,
-                          size: 20,
-                        ),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pop(context);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: isDark ? Colors.grey[800] : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Icon(
+                        Icons.arrow_forward_ios,
+                        color: Colors.blue,
+                        size: 20,
                       ),
                     ),
                   ),
@@ -579,151 +566,99 @@ class PrayerTimeSelectionPage extends StatelessWidget {
                   itemCount: prayerTimes.length,
                   itemBuilder: (context, index) {
                     final prayer = prayerTimes[index];
-                    return TweenAnimationBuilder<double>(
-                      tween: Tween<double>(begin: 0, end: 1),
-                      duration: Duration(milliseconds: 500 + (index * 100)),
-                      builder: (context, value, child) {
-                        return Transform.translate(
-                          offset: Offset(50 * (1 - value), 0),
-                          child: Opacity(
-                            opacity: value,
-                            child: Container(
-                              margin: const EdgeInsets.only(bottom: 20),
-                              child: Material(
-                                color: Colors.transparent,
-                                child: InkWell(
-                                  borderRadius: BorderRadius.circular(25),
-                                  onTap: () {
-                                    Navigator.push(
-                                      context,
-                                      PageRouteBuilder(
-                                        pageBuilder: (
-                                          context,
-                                          animation,
-                                          secondaryAnimation,
-                                        ) =>
-                                            PrayerPage(
-                                          isDark: isDark,
-                                          fontSize: fontSize,
-                                          updateFontSize: updateFontSize,
-                                          prayerTime:
-                                              prayer['title'].toString(),
-                                        ),
-                                        transitionsBuilder: (
-                                          context,
-                                          animation,
-                                          secondaryAnimation,
-                                          child,
-                                        ) {
-                                          const begin = Offset(1.0, 0.0);
-                                          const end = Offset.zero;
-                                          const curve = Curves.easeInOutCubic;
-                                          var tween = Tween(
-                                            begin: begin,
-                                            end: end,
-                                          ).chain(CurveTween(curve: curve));
-                                          return SlideTransition(
-                                            position: animation.drive(
-                                              tween,
-                                            ),
-                                            child: child,
-                                          );
-                                        },
-                                        transitionDuration: const Duration(
-                                          milliseconds: 500,
-                                        ),
-                                      ),
-                                    );
-                                  },
-                                  child: Container(
+                    return Container(
+                      margin: const EdgeInsets.only(bottom: 20),
+                      child: Material(
+                        color: Colors.transparent,
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(25),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => PrayerPage(
+                                  isDark: isDark,
+                                  fontSize: fontSize,
+                                  updateFontSize: updateFontSize,
+                                  prayerTime: prayer['title'].toString(),
+                                ),
+                              ),
+                            );
+                          },
+                          child: Container(
+                            decoration: BoxDecoration(
+                              gradient: LinearGradient(
+                                colors: isDark
+                                    ? [Colors.grey[900]!, Colors.grey[850]!]
+                                    : [Colors.white, Colors.grey[50]!],
+                                begin: Alignment.topLeft,
+                                end: Alignment.bottomRight,
+                              ),
+                              borderRadius: BorderRadius.circular(25),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: isDark ? Colors.white10 : Colors.black12,
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 5),
+                                ),
+                              ],
+                            ),
+                            child: Padding(
+                              padding: const EdgeInsets.all(20),
+                              child: Row(
+                                children: [
+                                  Container(
+                                    padding: const EdgeInsets.all(15),
                                     decoration: BoxDecoration(
                                       gradient: LinearGradient(
-                                        colors: isDark
-                                            ? [
-                                                Colors.grey[900]!,
-                                                Colors.grey[850]!,
-                                              ]
-                                            : [Colors.white, Colors.grey[50]!],
-                                        begin: Alignment.topLeft,
-                                        end: Alignment.bottomRight,
+                                        colors: [
+                                          Colors.blue.withOpacity(0.2),
+                                          Colors.blue.withOpacity(0.1),
+                                        ],
                                       ),
-                                      borderRadius: BorderRadius.circular(25),
-                                      boxShadow: [
-                                        BoxShadow(
-                                          color: isDark
-                                              ? Colors.white10
-                                              : Colors.black12,
-                                          blurRadius: 10,
-                                          offset: const Offset(0, 5),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Icon(
+                                      prayer['icon'] as IconData,
+                                      color: Colors.blue,
+                                      size: 40,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 20),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          prayer['title'] as String,
+                                          style: TextStyle(
+                                            fontSize: 22,
+                                            fontWeight: FontWeight.bold,
+                                            color: textColor,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 5),
+                                        Text(
+                                          prayer['description'] as String,
+                                          style: TextStyle(
+                                            fontSize: 14,
+                                            color: textColor.withOpacity(0.6),
+                                          ),
                                         ),
                                       ],
                                     ),
-                                    child: Padding(
-                                      padding: const EdgeInsets.all(20),
-                                      child: Row(
-                                        children: [
-                                          Container(
-                                            padding: const EdgeInsets.all(15),
-                                            decoration: BoxDecoration(
-                                              gradient: LinearGradient(
-                                                colors: [
-                                                  (prayer['color'] as Color)
-                                                      .withOpacity(0.2),
-                                                  (prayer['color'] as Color)
-                                                      .withOpacity(0.1),
-                                                ],
-                                              ),
-                                              borderRadius:
-                                                  BorderRadius.circular(20),
-                                            ),
-                                            child: Icon(
-                                              prayer['icon'] as IconData,
-                                              color: Colors.blue,
-                                              size: 40,
-                                            ),
-                                          ),
-                                          const SizedBox(width: 20),
-                                          Expanded(
-                                            child: Column(
-                                              crossAxisAlignment:
-                                                  CrossAxisAlignment.start,
-                                              children: [
-                                                Text(
-                                                  prayer['title'] as String,
-                                                  style: TextStyle(
-                                                    fontSize: 22,
-                                                    fontWeight: FontWeight.bold,
-                                                    color: textColor,
-                                                  ),
-                                                ),
-                                                const SizedBox(height: 5),
-                                                Text(
-                                                  prayer['description']
-                                                      as String,
-                                                  style: TextStyle(
-                                                    fontSize: 14,
-                                                    color: textColor
-                                                        .withOpacity(0.6),
-                                                  ),
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          Icon(
-                                            Icons.arrow_forward_ios,
-                                            color: Colors.blue.withOpacity(0.7),
-                                            size: 20,
-                                          ),
-                                        ],
-                                      ),
-                                    ),
                                   ),
-                                ),
+                                  Icon(
+                                    Icons.arrow_forward_ios,
+                                    color: Colors.blue.withOpacity(0.7),
+                                    size: 20,
+                                  ),
+                                ],
                               ),
                             ),
                           ),
-                        );
-                      },
+                        ),
+                      ),
                     );
                   },
                 ),
@@ -784,25 +719,20 @@ class _SettingsPageState extends State<SettingsPage> {
                     ),
                   ),
                   const Spacer(),
-                  MouseRegion(
-                    cursor: SystemMouseCursors.click,
-                    child: GestureDetector(
-                      onTap: () {
-                        Navigator.pop(context);
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: BoxDecoration(
-                          color: widget.isDark
-                              ? Colors.grey[800]
-                              : Colors.grey[100],
-                          borderRadius: BorderRadius.circular(15),
-                        ),
-                        child: Icon(
-                          Icons.arrow_forward_ios,
-                          color: Colors.blue,
-                          size: 20,
-                        ),
+                  GestureDetector(
+                    onTap: () {
+                      Navigator.pop(context);
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: widget.isDark ? Colors.grey[800] : Colors.grey[100],
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Icon(
+                        Icons.arrow_forward_ios,
+                        color: Colors.blue,
+                        size: 20,
                       ),
                     ),
                   ),
@@ -826,8 +756,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         borderRadius: BorderRadius.circular(25),
                         boxShadow: [
                           BoxShadow(
-                            color:
-                                widget.isDark ? Colors.white10 : Colors.black12,
+                            color: widget.isDark ? Colors.white10 : Colors.black12,
                             blurRadius: 10,
                             offset: const Offset(0, 5),
                           ),
@@ -848,15 +777,11 @@ class _SettingsPageState extends State<SettingsPage> {
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: widget.isDark
-                                        ? Colors.grey[800]
-                                        : Colors.grey[200],
+                                    color: widget.isDark ? Colors.grey[800] : Colors.grey[200],
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   child: Icon(
-                                    widget.isDark
-                                        ? Icons.dark_mode
-                                        : Icons.light_mode,
+                                    widget.isDark ? Icons.dark_mode : Icons.light_mode,
                                     color: Colors.blue,
                                     size: 28,
                                   ),
@@ -864,29 +789,22 @@ class _SettingsPageState extends State<SettingsPage> {
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         "المظهر",
                                         style: TextStyle(
                                           fontSize: 18,
                                           fontWeight: FontWeight.w600,
-                                          color: widget.isDark
-                                              ? Colors.white
-                                              : Colors.black,
+                                          color: widget.isDark ? Colors.white : Colors.black,
                                         ),
                                       ),
                                       const SizedBox(height: 4),
                                       Text(
-                                        widget.isDark
-                                            ? "الوضع الليلي"
-                                            : "الوضع النهاري",
+                                        widget.isDark ? "الوضع الليلي" : "الوضع النهاري",
                                         style: TextStyle(
                                           fontSize: 14,
-                                          color: widget.isDark
-                                              ? Colors.white70
-                                              : Colors.black54,
+                                          color: widget.isDark ? Colors.white70 : Colors.black54,
                                         ),
                                       ),
                                     ],
@@ -919,8 +837,7 @@ class _SettingsPageState extends State<SettingsPage> {
                         borderRadius: BorderRadius.circular(25),
                         boxShadow: [
                           BoxShadow(
-                            color:
-                                widget.isDark ? Colors.white10 : Colors.black12,
+                            color: widget.isDark ? Colors.white10 : Colors.black12,
                             blurRadius: 10,
                             offset: const Offset(0, 5),
                           ),
@@ -936,9 +853,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                 Container(
                                   padding: const EdgeInsets.all(12),
                                   decoration: BoxDecoration(
-                                    color: widget.isDark
-                                        ? Colors.grey[800]
-                                        : Colors.grey[200],
+                                    color: widget.isDark ? Colors.grey[800] : Colors.grey[200],
                                     borderRadius: BorderRadius.circular(15),
                                   ),
                                   child: Icon(
@@ -950,17 +865,14 @@ class _SettingsPageState extends State<SettingsPage> {
                                 const SizedBox(width: 16),
                                 Expanded(
                                   child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
+                                    crossAxisAlignment: CrossAxisAlignment.start,
                                     children: [
                                       Text(
                                         "حجم الخط",
                                         style: TextStyle(
                                           fontSize: 18,
                                           fontWeight: FontWeight.w600,
-                                          color: widget.isDark
-                                              ? Colors.white
-                                              : Colors.black,
+                                          color: widget.isDark ? Colors.white : Colors.black,
                                         ),
                                       ),
                                       const SizedBox(height: 4),
@@ -968,9 +880,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                         "تحكم في حجم الخط داخل التطبيق",
                                         style: TextStyle(
                                           fontSize: 14,
-                                          color: widget.isDark
-                                              ? Colors.white70
-                                              : Colors.black54,
+                                          color: widget.isDark ? Colors.white70 : Colors.black54,
                                         ),
                                       ),
                                     ],
@@ -1015,9 +925,7 @@ class _SettingsPageState extends State<SettingsPage> {
                             Container(
                               padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
-                                color: widget.isDark
-                                    ? Colors.grey[800]
-                                    : Colors.grey[100],
+                                color: widget.isDark ? Colors.grey[800] : Colors.grey[100],
                                 borderRadius: BorderRadius.circular(20),
                                 border: Border.all(
                                   color: Colors.blue.withOpacity(0.3),
@@ -1040,9 +948,7 @@ class _SettingsPageState extends State<SettingsPage> {
                                     textAlign: TextAlign.center,
                                     style: TextStyle(
                                       fontSize: _currentFontSize * 0.6,
-                                      color: widget.isDark
-                                          ? Colors.white
-                                          : Colors.black,
+                                      color: widget.isDark ? Colors.white : Colors.black,
                                       fontWeight: FontWeight.w500,
                                       height: 1.5,
                                     ),
@@ -1083,15 +989,7 @@ class PrayerPage extends StatefulWidget {
   State<PrayerPage> createState() => _PrayerPageState();
 }
 
-class _PrayerPageState extends State<PrayerPage>
-    with SingleTickerProviderStateMixin {
-  late PageController _pageController;
-  int currentIndex = 0;
-  final FocusNode _focusNode = FocusNode();
-  bool _showList = false;
-  late AnimationController _slideController;
-  late Animation<Offset> _slideAnimation;
-
+class _PrayerPageState extends State<PrayerPage> {
   final List<Map<String, String>> bakrPrayers = [
     {
       'title': 'صلاة الشكر',
@@ -1126,12 +1024,12 @@ class _PrayerPageState extends State<PrayerPage>
     {
       'title': 'مز1: طوبى للرجل',
       'body':
-          'طُوبَى للرَّجُل الذِى لَمْ يَسْلكْ فى مَشُورةِ المنَافِقِينَ. وفى طَريقِ الَخُطَاةِ لَمْ يَقِفْ، وفى مَجْلسِ المسْتَهزِئينَ لَمْ يَجِلسْ. لكنْ فى نَامُوسِ الرَّبَّ إرادَتُه، وفى نَامُوسِهِ يَلْهجُ نَهاراً وليْلاً. فيَكونُ كالشجَرةِ المغْروسَةِ عَلى مَجارِى المياهِ، التِى تُعْطِى ثَمَرَها فى حِينِهِ. وَورَقُها لاينْتَثِرُ، وكلُّ ما يَصْنعُ ينْجَحُ فِيهِ. لَيسَ كَذلِكَ المنَافِقُونَ، لَيسَ كَذلَكَ. لكنَّهمْ كالَهَبَاءِ الذِى تَذْرِيهِ الرِّيحُ عَنْ وجُهِ الأرْضِ. فَلهَذَا لا يَقومُ المنَافِقُونَ فى الدَّينُونَةِ، ولاَ الخُطَاةُ فى مَجْمَعِ الصِّدِّيقينَ. لأنَّ الرَّبِّ يَعْرِفُ طَريق الأبْرارِ، وأمَّا طَرِيقُ المنَافِقينَ فَتُبادُ. هَلِّلُويا.',
+          'طُوبَى للرَّجُل الذِى لَمْ يَسْلكْ فى مَشُورةِ المنَافِقِينَ. وفى طَريقِ الَخُطَاةِ لَمْ يَقِفْ، وفى مَجْلسِ المسْتَهزِئينَ لَمْ يَجِلسْ. لكنْ فى نَامُوسِ الرَّبَّ إرادَتُه، وفى نَامُوسِهِ يَلْهجُ نَهاراً وليْلاً. فيَكونُ كالشجَرةِ المغْروسَةِ عَلى مَجارِى المياهِ، التِى تُعْطِى ثَمَرَها في حِينِهِ. وَورَقُها لاينْتَثِرُ، وكلُّ ما يَصْنعُ ينْجَحُ فِيهِ. لَيسَ كَذلِكَ المنَافِقُونَ، لَيسَ كَذلَكَ. لكنَّهمْ كالَهَبَاءِ الذِى تَذْرِيهِ الرِّيحُ عَنْ وجُهِ الأرْضِ. فَلهَذَا لا يَقومُ المنَافِقُونَ فى الدَّينُونَةِ، ولاَ الخُطَاةُ فى مَجْمَعِ الصِّدِّيقينَ. لأنَّ الرَّبِّ يَعْرِفُ طَريق الأبْرارِ، وأمَّا طَرِيقُ المنَافِقينَ فَتُبادُ. هَلِّلُويا.',
     },
     {
       'title': 'مز2: لماذا ارتجت الامم',
       'body':
-          'لِماذَا إرْتَجَّتِ الأمَمُ، وفَكَّرتِ الشُّعوبُ بالبَاطِل. قَامَ مُلوكُ الأرْضِ، وتآمَرَ الرُّؤساءُ مَعاً عَلى الرَّبِّ وعَلىِ مَسِيحِهِ قائِلينَ: لِنَقْطَعْ أغْلالَهُم، ولِنَطرحْ عنَّا نَيْرهَا. السَاكِنُ فى السَّمَواتِ يَضْحَكُ بِهِم، والرَّبُّ يَمْقُتُهُم. حِينَئذٍ يُكلِّمهُم بغَضَبهِ، وبِرَجزِهِ يُقْلقُهمْ. أنَا أقَمْتهُ مَلكاً عَلى صُهْيونٍ جَبَل قُدْسهِ، لأكُرِّزَ بأَمْر الرَّبِّ. الرَّبُّ قالَ لِى: أنْتَ إبْنِى، وأنَاَ اليَومَ وَلدْتُك. سَلْنِى فأُعْطِيكَ الأُمَمَ مِيرَاثَكَ، وسُلْطانَكَ إلَى أقْطارِ الأرْضِ. لترْعَاهُم بقضِيبٍ مِنْ حَديدٍ. ومِثْل آنِيةِ الفَخَّارِ تَسْحقُهمْ. فالآنَ أيُّهَا الملُوكُ إفْهَموا، تأدَّبُوا ياجَميعَ قَضَاةِ الأرْضِ أعْبدُوا الرَّبَّ بَخَشْيةِ. وهَللُوا لَهُ برعْدَةٍ. الْزَمُوا الأدَبَ لِئلاَّ يغْضَبَ الرَّبُّ فتَضِلُّوا عَنْ طَريقِ الحَقِّ. عِنْدمَا يتَّقدُ غَضَبُه بسُرْعةٍ. طُوبَى لجَمِيع المتَّكلِينَ عَليْهِ. هَلِّلُويا.',
+          'لِماذَا إرْتَجَّتِ الأمَمُ، وفَكَّرتِ الشُّعوبُ بالبَاطِل. قَامَ مُلوكُ الأرْضِ، وتآمَرَ الرُّؤساءُ مَعاً عَلى الرَّبِّ وعَلىِ مَسِيحِهِ قائِلينَ: لِنَقْطَعْ أغْلالَهُم، ولِنَطرحْ عنَّا نَيْرهَا. السَاكِنُ فى السَّمَواتِ يَضْحَكُ بِهِم، والرَّبُّ يَمْقُتُهُم. حِينَئذٍ يُكلِّمهُم بغَضَبهِ، وبِرَجزِهِ يُقْلقُهمْ. أنَا أقَمْتُه مَلكاً عَلى صُهْيونٍ جَبَل قُدْسهِ، لأكُرِّزَ بأَمْر الرَّبِّ. الرَّبُّ قالَ لِى: أنْتَ إبْنِى، وأنَاَ اليَومَ وَلدْتُك. سَلْنِى فأُعْطِيكَ الأُمَمَ مِيرَاثَكَ، وسُلْطانَكَ إلَى أقْطارِ الأرْضِ. لترْعَاهُم بقضِيبٍ مِنْ حَديدٍ. ومِثْل آنِيةِ الفَخَّارِ تَسْحقُهمْ. فالآنَ أيُّهَا الملُوكُ إفْهَموا، تأدَّبُوا ياجَميعَ قَضَاةِ الأرْضِ أعْبدُوا الرَّبَّ بَخَشْيةِ. وهَللُوا لَهُ برعْدَةٍ. الْزَمُوا الأدَبَ لِئلاَّ يغْضَبَ الرَّبُّ فتَضِلُّوا عَنْ طَريقِ الحَقِّ. عِنْدمَا يتَّقدُ غَضَبُه بسُرْعةٍ. طُوبَى لجَمِيع المتَّكلِينَ عَليْهِ. هَلِّلُويا.',
     },
     {
       'title': 'مز3: يارب لماذة كثر',
@@ -1164,7 +1062,7 @@ class _PrayerPageState extends State<PrayerPage>
           'خَلِّصْنِى يَاربُّ فإنَّ البَارَّ قَدْ فَنَى، وقَدْ قَلَّتِ الأمَانَةُ مِنْ بَنِى البَشَر. تَكَّلم كُلٌ أحَدٍ مَعَ قَريبهِ بالبَاطِلِ. شِفاةٌ غَاشَّةٌ فى قُلوبِهِمْ، وبقُلُوبِهِمْ تكَلَّمُوا. يَسْتأصِلُ الرَّبُّ جَمَيعَ الشِّفاةِ الغَاشَّةِ، واللِّسَانِ النَّاطِقِ بالكِبْريَاءِ، الذِينَ قالُوا نُعظِّمُ ألْسِنَتَنَا. شِفَاهُنا مَعَنا. فَمَن هُوَ يَسُوُد عَلْينا؟ مِنْ أجْل شَقَاءِ المسَاكِين وتَنهُّدِ البَائِسينَ الآنَ أقُومُ، يقُولُ الرَّبُّ، أصْنَعُ الَخَلاصَ عَلانيةً. كَلامُ الرَّبِّ كَلامّ نَقىٌّ، كفِضَّةٍ مُصفَّاةٍ مُجرَّبةٍ فى الأرْض قَدْ صُفِّيتْ سَبْعةَ أضْعَافٍ. وأنْتَ يارَبُّ تُنَجِّينَا وتَحْفَظُنا مِنْ هَذا الجيل وإلى الدَّهْر. المنَافِقُونَ حَوْلَنا يَمْشُونَ مِثْلَ عَظَمَتِكَ. رَفَعْتَ بَنِى البَشَرِ. هَلِّلُويا.',
     },
     {
-      'title': 'مز12: الي متي يارب تنساني؟',
+      'title': 'مز12: الي متى يارب تنساني؟',
       'body':
           'إلَى مَتَى يارَبُّ تَنْسانِى؟ إلَى الإنْقِضَاءِ؟ حَتَّى مَتّى تَصْرفُ وَجْهَك عنِّى؟ إلَى مَتَى أرْدُدْ هَذِهِ المشُورَاتِ فى نَفْسِى، وهَذِهِ الأوْجَاعُ فى قَلْبى النّهَارَ كُلَّه؟ إلَى مَتَى يَرْتفِعُ عَدوِّى عَلىَّ؟ أنْظُرْ وإسْتَجِبْ إلىَّ يَاربِّى وإلَهِى. أنَرْ عَيْنىَّ لِئلاَّ أنَامُ نَومَ الموْتِ، لِئلاَّ يَقولَ عَدوِّى إنِّى قَدْ قَويتُ عَليْهِ. الذينَ يُحْزنُونَنِى يَتهلَّلُونَ إنْ أنَا زَلَلْتُ. أمَّا أنَا فَعَلىِ رَحْمتكَ توَكَّلتُ، يبْتَهجُ قَلبِى بَخَلاصِكَ. أُسبِّحُ الرَّبَّ الَمحْسِن إلىَّ، وأُرتِّل لإسْمِ الرَّبِّ العَالِى. هَلِّلُويا.',
     },
@@ -1181,7 +1079,7 @@ class _PrayerPageState extends State<PrayerPage>
     {
       'title': 'مز18: السموات تحدث بمجد الله',
       'body':
-          'السَّموات تُحدِّثُ بِمَجْدِ الله. والفَلَكُ يُخْبرُ بعَمَلِ يَديْهِ. يَومِّ إلى يَوْمٍ يُبْدى قَولاً. ولَيلِّ إلَى ليلٍ يُظْهرُ عِلْماً. لاقولَ ولاكلامَ، الذِينَ لاتَسْمعُ أصْوَاتَهُم. فى كلِّ الأرْضِ خَرَجَ مَنْطقُهُم. وإلَى أقْصَى المسْكُونةِ بَلغتْ أقْوالُهُم. جَعَلَ فى الشَّمْسِ مِظلتَهُ. وهِىَ مِثلُ العَريسِ الخَارجِ مِنْ خِدْرهِ. يتَهلَّلُ مِثْل الجَبَّار الذِى يُسْرعُ فى طَريقِهِ. مِنْ أقْصَى السَّماءِ خُروجُها، ومُنْتهَاهَا إلَى أقْصَى السَّماءِ ولا شَئ يخْتَفى مِنَ حَرارَتْهَا.نَامُوسُ الرَّبِّ بِلاَعَيبٍ، يَردُّ النُّفوسَ. شَهادَةُ الرَّبِّ صادِقَةٌ، تُعلِّمُ الأطْفال. فَرائِضَ الرَّبِّ مُسْتقِيمةٌ، تُفْرحُ القَلْب. وَصيَّةُ الرَّبِّ مُضيئةٌ. تُنَيرُ العَيْنيْنِ عَنْ بُعدٍ. خَشْيةُ الرَّبِّ زَكيَّةٌ، دَائمَةٌ إلَى أبَدِ الأبَدِ. أحْكامُ الرَّبِّ أحْكامُ حَقِّ وعادِلةٌ مَعاً. مَشِيئةُ قَلْبهِ مُخْتارَةٌ أفْضَلُ مِنَ الذَّهَبِ والحَجَرِ الكَثِيرِ الثَّمنِ، وأحْلَى مِنَ العَسَلِ والشَّهدِ. عَبْدكَ يَحْفظُها، وفى حِفْظهَا ثَوابٌ عَظِيمٌ. الهَفَواتُ مِنَ يَشْعرُ بِهَا؟ مِنَ الخَطايَا المسْتَتِرةُ يَاربُّ طهِّرِنى. ومِنَ المتكبِّرينَ أحْفَظْ عَبْدَكَ، حَتَّى لايَتسَلَّطوا عَلىَّ فَحينَئذٍ أكُونُ بِلا عَيبٍ، وأتَنَقَّى مِنْ خَطيَّةٍ عَظِيمةٍ، وتَكونُ جَميعُ أقْوالِ فَمِى وفِكْرِ قَلبىِ مَرضِيَّةً أمَامَكَ فى كلِّ حينٍ. يَاربُّ أنتَ مُعيِنى ومُخلِّصِى. هَلِّلُويا.',
+          'السَّموات تُحدِّثُ بِمَجْدِ الله. والفَلَكُ يُخْبرُ بعَمَلِ يَديْهِ. يَومِّ إلى يَوْمٍ يُبْدى قَولاً. ولَيلِّ إلَى ليلٍ يُظْهرُ عِلْماً. لاقولَ ولاكلامَ، الذِينَ لاتَسْمعُ أصْوَاتَهُم. فى كلِّ الأرْضِ خَرَجَ مَنْطقُهُم. وإلَى أقْصَى المسْكُونةِ بَلغتْ أقْوالُهُم. جَعَلَ فى الشَّمْسِ مِظلتَهُ. وهِىَ مِثلُ العَريسِ الخَارجِ مِنْ خِدْرهِ. يتَهلَّلُ مِثْل الجَبَّار الذِى يُسْرعُ فى طَريقِهِ. مِنْ أقْصَى السَّماءِ خُروجُها، ومُنْتهَاهَا إلَى أقْصَى السَّماءِ ولا شَئ يخْتَفى مِنَ حَرارَتْهَا.نَامُوسُ الرَّبِّ بِلاَعَيبٍ، يَردُّ النُّفوسَ. شَهادَةُ الرَّبِّ صادِقَةٌ، تُعلِّمُ الأطْفال. فَرائِضَ الرَّبِّ مُسْتقِيمةٌ، تُفْرحُ القَلْب. وَصيَّةُ الرَّبِّ مُضيئةٌ. تُنَيرُ العَيْنيْنِ عَنْ بُعدٍ. خَشْيةُ الرَّبِّ زَكيَّةٌ، دَائمَةٌ إلَى أبَدِ الأبَدِ. أحْكامُ الرَّبِّ أحْكامُ حَقِّ وعادِلةٌ مَعاً. مَشِيئةُ قَلْبهِ مُخْتارَةٌ أفْضَلُ مِنَ الذَّهَبِ والحَجَرِ الكَثِيرِ الثَّمنِ، وأحْلَى مِنَ العَسَلِ والشَّهدِ. عَبْدكَ يَحْفظُها، وفى حِفْظهَا ثَوابٌ عَظِيمٌ. الهَفَواتُ مِنَ يَشْعرُ بِهَا؟ مِنَ الخَطايَا المسْتَتِرةُ يَاربُّ طهِّرِنى. ومِنَ المتكبِّرينَ أحْفَظْ عَبْدَكَ، حَتَّى لايَتسَلَّطوا عَلىَّ فَحينَئذٍ أكُونُ بِلا عَيبٍ، وأتَنقَّى مِنْ خَطيَّةٍ عَظِيمةٍ، وتَكونُ جَميعُ أقْوالِ فَمِى وفِكْرِ قَلبىِ مَرضِيَّةً أمَامَكَ فى كلِّ حينٍ. يَاربُّ أنتَ مُعيِنى ومُخلِّصِى. هَلِّلُويا.',
     },
     {
       'title': 'مز24: اليك يارب رفعت نفسي',
@@ -1216,12 +1114,12 @@ class _PrayerPageState extends State<PrayerPage>
     {
       'title': 'مز142: يا رب اسمع صلاتي',
       'body':
-          'يارَبُّ إسْمَع صَلاتِى. إنْصِتْ إلى طَلبَتِى بَحَقِّكَ. إسْتَجبْ لى بَعدْلِكَ. ولا تدْخُلْ فى المحَاكَمةِ مَعَ عَبْدكَ فإنَّهُ لَنْ يَتَزكَّىِ قُدَّامكَ كلُّ حَىِّ. لأنَّ العَدوَّ قدِ إضْطهدَ نَفْسِى، وأذَلَّ فى الأرْضِ حَياتِى. أجْلسَنِى فى الظَلَّمَاتِ مِثْلَ الموْتَى مُنْذُ الدَّهرٍ. أضّجَرتْ فى رُوحى، إضْطَربَ فى قَلْبِى. تذكَّرتُ الأيَّامَ الأولَى ولَهِجْتُ فى كلِّ أعْمالِكَ، وفى صَنائِع يَدَيْك كنْتُ أتَأمَّلُ. بَسَطتُ إليْكَ يَدىَّ، صَارتْ نَفْسِى لكَ مِثلُ أرْضٍ بِلا مَاءٍ. إسْتَجبْ لى يَاربُّ عاجلاً فَقَد فَنِيتْ رُوحِى، لا تَحْجبْ وجْهَكَ عنِّى فأشَابهُ الهابِطينَ فى الجُبِّ. فلأسْمَعْ فى الغَدَاةِ رحْمَتكَ، فإنِّى عَليكَ تَوكَّلتُ. عرِّفْنِى يارَبُّ الطَّريقَ التى أسْلُكُ فِيهَا لأنِّى إليْكَ رفَعْتُ نَفْسِى. إنْقِذْنِى مِنْ أعْدائِى يارَبُّ، فإنِّى لجأْتُ إليْكَ. علِّمنِى أنْ أصْنَعَ مَشِيئتَكَ، لأنَّك أنْتَ هُو إلهِى. رُوحُكَ القُدُّوسُ فَليهْدنِى إلى الإسْتِقامَةِ. مِنْ أجْلِ إسْمِكَ ياربُّ تُحْيِينِى، بَحَقِّكَ تُخْرجُ مِنَ الشِّدَّةِ نَفْسى. وبرَحْمتِكَ تَسْتأصِلُ أعْدائِى، وتُهلِكَ جُميعَ مُضايقى نَفْسِى لأنِّى أنَا هُو عَبْدكَ أنَا. هَلِّلُويا.',
+          'يارَبُّ إسْمَع صَلاتِى. إنْصِتْ إلى طَلبَتِى بَحَقِّكَ. إسْتَجبْ لى بَعدْلِكَ. ولا تدْخُلْ فى المحَاكَمةِ مَعَ عَبْدكَ فإنَّهُ لَنْ يَتَزكَّىِ قُدَّامكَ كلُّ حَىِّ. لأنَّ العَدوَّ قدِ إضْطهدَ نَفْسِى، وأذَلَّ فى الأرْضِ حَياتِى. أجْلسَنِى فى الظَلَّمَاتِ مِثْلَ الموْتَى مُنْذُ الدَّهرٍ. أضّجَرتْ فى رُوحى، إضْطَربَ فى قَلْبِى. تذكَّرتُ الأيَّامَ الأولَى ولَهِجْتُ فى كلِّ أعْمالِكَ، وفى صَنائِع يَدَيْك كنْتُ أتَأمَّلُ. بَسَطتُ إليْكَ يَدىَّ، صَارتْ نَفْسِى لكَ مِثلُ أرْضٍ بِلا مَاءٍ. إسْتَجبْ لى يَاربُّ عاجلاً فَقَد فَنِيتْ رُوحِى، لا تَحْجبْ وجْهَكَ عنِّى فأشَابهُ الهابِطينَ فى الجُبِّ. فلأسْمَعْ فى الغَدَاةِ رحْمَتكَ، فإنِّى عَليكَ تَوكَّلتُ. عرِّفْنِى يارَبُّ الطَّريقَ التى أسْلُكَ فِيهَا لأنِّى إليْكَ رفَعْتُ نَفْسِى. إنْقِذْنِى مِنْ أعْدائِى يارَبُّ، فإنِّى لجأْتُ إليْكَ. علِّمنِى أنْ أصْنَعَ مَشِيئتَكَ، لأنَّك أنْتَ هُو إلهِى. رُوحُكَ القُدُّوسُ فَليهْدنِى إلى الإسْتِقامَةِ. مِنْ أجْلِ إسْمِكَ ياربُّ تُحْيِينِى، بَحَقِّكَ تُخْرجُ مِنَ الشِّدَّةِ نَفْسى. وبرَحْمتِكَ تَسْتأصِلُ أعْدائِى، وتُهلِكَ جُميعَ مُضايقى نَفْسِى لأنِّى أنَا هُو عَبْدكَ أنَا. هَلِّلُويا.',
     },
     {
       'title': 'الانجيل (يوحنا1:1-17)',
       'body':
-          'فى البَدْءِ كَانَ الكَلِمةَ، والكَلِمةُ كانَ عِنْدَ اللهِ، وكانَ الكَلِمةَ اللَّهُ. هَذا كانَ فى البَدءِ عِنْدَ اللهِ. كلُّ شئٍ بهِ كانَ، وبِغيرهِ لمْ يَكُن شَئٍ مْمَّا كانَ. فِيهِ كانَتِ الحَياةُ والحَياةُ كَانَتْ نُورَ النَّاسِ والنُّورُ أضَاءَ فى الظَّلْمةِ، والظَّلْمةُ لَمْ تُدْركهُ. كانَ إنْسانٌ مُرْسَلٌ مِنَ اللهِ أسْمُه يُوحَنَّا، هَذَا جَاءَ للشَّهَادةِ لِيشْهَد للنُّورِ لِيؤمِنَ الكُلُّ بوَاسِطتهِ. لَمْ يَكُن هُوَ النُّورُ بَلْ ليشْهَدَ للنَّورِ. كانَ النُّورُ الحَقِيقىُّ الذِى يُنِيرُ كلَّ إنْسَانٍ آتِياً إلى العَالمِ. كانَ فى العَالَم وكَونُ العَالَم بهِ ولَمْ يَعْرفْهُ العَالَمُ. إلى خاصَّتِه جَاءَ، وخاصَّتُهُ لَمْ تَقْبلْهُ. وأمَّا الذِينَ قَبلُوهُ فأعْطاهُمْ سُلْطاناً أنْ يَصيرُوا أبْنَاءَ اللهِ الذِينَ يُؤمنُونَ بإسْمِهِ، الذِينَ وُلدُوا لَيسَ مِنْ دَمٍ، ولا مِنْ مَشِيئةِ جَسَدٍ، ولا مِنْ مَشِيئةِ رَجُلٍ، لِكنْ مِنَ اللهِ وُلدُوا. والكَلمةُ صارَ جَسَداً وحَلَّ بَيْننَا ورَأينَا مَجْدهُ مِثْل مَجدِ إبْنٍ وَحيدِ لأبِيهِ مَمْلوءاً نِعْمةً وحَقَّا. يُوحنَّا شَهِدَ لَهُ وصَرخَ قائِلاً: هَذا هُو الذِى قلْتُ عَنْهِ أنَّ الذِى يَأتِى بَعْدِى كانَ قَبْلِى، حَقَّا كانَ أقْدَمَ مِنِّى، ونَحنُ جَميعاً أخَذْنا مِنَ إمتِلائِه، ونعْمةً عِوضاً عَنْ نِعْمةٍ. لأنَّ النَّامُوسَ بَمُوسَى أعْطَى، أمَّا النِّعْمةُ والحَقُّ فبيَسُوع المسَيح صَاراَ. والمجْدَ للَهِ دَائماً.',
+          'فى البَدْءِ كَانَ الكَلِمةَ، والكَلِمةُ كانَ عِنْدَ اللهِ، وكانَ الكَلِمةَ اللَّهُ. هَذا كانَ فى البَدءِ عِنْدَ اللهِ. كلُّ شئٍ بهِ كانَ، وبِغيرهِ لمْ يَكُن شَئٍ مْمَّا كانَ. فِيهِ كانَتِ الحَياةُ والحَياةُ كَانَتْ نُورَ النَّاسِ والنُّورُ أضَاءَ فى الظَّلْمةِ، والظَّلْمةُ لَمْ تُدْركهُ. كانَ إنْسانٌ مُرْسَلٌ مِنَ اللهِ أسْمُه يُوحَنَّا، هَذَا جَاءَ للشَّهَادةِ لِيشْهَد للنُّورِ لِيؤمِنَ الكُلُّ بوَاسِطتهِ. لَمْ يَكُن هُوَ النُّورُ بَلْ ليشْهَدَ للنَّورِ. كانَ النُّورُ الحَقِيقىُّ الذِى يُنِيرُ كلَّ إنْسَانٍ آتِياً إلى العَالمِ. كانَ فى العَالَم وكَونُ العَالَم بهِ ولَمْ يَعْرفْهُ العَالَمُ. إلى خاصَّتِه جَاءَ، وخاصَّتُهُ لَمْ تَقْبلْهُ. وأمَّا الذِينَ قَبلُوهُ فأعْطاهُمْ سُلْطاناً أنْ يَصيرُوا أبْنَاءَ اللهِ الذِينَ يُؤمنُونَ بإسْمِهِ، الذِينَ وُلدُوا لَيسَ مِنْ دَمٍ، ولا مِنْ مَشِيئةِ جَسَدٍ، ولا مِنْ مَشِيئةِ رَجُلٍ، لِكنْ مِنَ اللهِ وُلدُوا. والكَلمةُ صارَ جَسَداً وحَلَّ بَيْننَا ورَأينَا مَجْدهُ مِثْل مَجدِ إبْنٍ وَحيدِ لأبِيهِ مَمْلوءاً نِعْمةً وحَقَّا. يُوحنَّا شَهِدَ لَهُ وصَرخَ قائِلاً: هَذا هُو الذِى قلْتُ عَنْهِ أنَّ الذِى يَأتِى بَعْدِى كانَ قَبْلِى، حَقَّا كانَ أقْدَمَ مِنِّى، ونَحنُ جَميعاً أخَذْنا مِنْ إمتِلائِه، ونعْمةً عِوضاً عَنْ نِعْمةٍ. لأنَّ النَّامُوسَ بَمُوسَى أعْطَى، أمَّا النِّعْمةُ والحَقُّ فبيَسُوع المسَيح صَاراَ. والمجْدَ للَهِ دَائماً.',
     },
     {
       'title': 'القطعة الاولي',
@@ -1256,7 +1154,7 @@ class _PrayerPageState extends State<PrayerPage>
     {
       'title': 'السلام لك',
       'body':
-          'السَّلامُ لَك. نَسْألكِ أيَّتُها القِدّيسَةُ الممْتَلِئةُ مَجْداً العَذْراءُ كلَّ حينٍ والِدةُ الإلَهِ أمُّ المسيحِ، أصْعدى صَلَواتَنا إلَى إبْنِكِ الحَبيبِ ليغْفِرَ لَنا خَطايانا. السَّلامُ لِلَّتى وَلَدتْ لَنا النّورَ الحَقيقىَّ المسيحَ إلَهنا العَذْراءُ القدّيسَةُ، إسْألى الرَّبَّ عنّا ليَصْنَعَ رَحْمَةً مَعَ نُفوسِنا ويغْفر لَنا خَطايانا. أيَّتُها العَذْراءُ مَرْيَم والِدةُ الإلهِ القِدّيسَةُ الشَّفيعَةُ الأمينَةُ لجنْسِ البَشرِ-يّةِ، إشْفَعى فينا أَمامَ المَسيحِ الَّذى وَلدْتيهِ لِكَىْ يُنْعِم عَلَيْنا بغُفْران خَطايانا. السَّلامُ لَكِ أيَّتُها العَذْراءُ الملِكةُ الحَقيقيَّةُ. السَّلامُ لفَخْر جنْسِنا، وَلدْتِ لَنا عمّانوئيل. نَسْألُكِ اذْكرينا أيَّتُها الشَّفيعَةُ المؤْتَمَنةُ أَمامَ ربِّنا يَسوعِ المسيحِ ليغْفِرَ لَنا خَطايانا.',
+          'السَّلامُ لَك. نَسْألكِ أيَّتُها القِدّيسَةُ الممْتَلِئةُ مَجْداً العَذْراءُ كلَّ حينٍ والِدةُ الإلَهِ أمُّ المسيحِ، أصْعدى صَلَواتَنا إلَى إبْنِكِ الحَبيبِ ليغْفِرَ لَنا خَطايانا. السَّلامُ لِلَّتى وَلَدتْ لَنا النّورَ الحَقيقىَّ المسيحَ إلَهنا العَذْراءُ القدّيسَةُ، إسْألى الرَّبَّ عنّا ليَصْنَعَ رَحْمَةً مَعَ نُفوسِنا ويغْفر لَنا خَطايانا. أيَّتُها العَذْراءُ مَرْيَم والِدةُ الإلهِ القِدّيسَةُ الشَّفيعَةُ الأمينَةُ لجنْسِ البَشرِيّةِ، إشْفَعى فينا أَمامَ المَسيحِ الَّذى وَلدْتيهِ لِكَىْ يُنْعِم عَلَيْنا بغُفْران خَطايانا. السَّلامُ لَكِ أيَّتُها العَذْراءُ الملِكةُ الحَقيقيَّةُ. السَّلامُ لفَخْر جنْسِنا، وَلدْتِ لَنا عمّانوئيل. نَسْألُكِ اذْكرينا أيَّتُها الشَّفيعَةُ المؤْتَمَنةُ أَمامَ ربِّنا يَسوعِ المسيحِ ليغْفِرَ لَنا خَطايانا.',
     },
     {
       'title': 'بدء قانون الإيمان',
@@ -1280,7 +1178,7 @@ class _PrayerPageState extends State<PrayerPage>
     {
       'title': 'الصلاة الربانية',
       'body':
-          'للَّهُم اجْعلنا مُستحِقين أنْ نقولَ بِشكرٍ: أبانا الذي في السَّمَواتِ، لِيتَقدس اسْمكَ. ليأتِ مَلكوتُكَ. لتَكن مَشيئَتُكَ، كما في السّماءِ كَذلك على الأرْضِ. خُبزَنا الذي للغدِ اعطِنا اليومَ. واغفِر لنا ذنوبَنا كما نغْفر نحنُ أيضّا للمذنبينَ إلينا. ولا تُدخِلنا في تَجرِبةٍ. لكن نجّنا مِنْ الشّريرِ. بالمسيحِ يسوعُ ربُّنا، لأنَّ لَكَ المُلكَ والقوةَ والمجدَ إلى الأبدِ. آمين.',
+          'اللَّهُم اجْعلنا مُستحِقين أنْ نقولَ بِشكرٍ: أبانا الذي في السَّمَواتِ، لِيتَقدس اسْمكَ. ليأتِ مَلكوتُكَ. لتَكن مَشيئَتُكَ، كما في السّماءِ كَذلك على الأرْضِ. خُبزَنا الذي للغدِ اعطِنا اليومَ. واغفِر لنا ذنوبَنا كما نغْفر نحنُ أيضّا للمذنبينَ إلينا. ولا تُدخِلنا في تَجرِبةٍ. لكن نجّنا مِنْ الشّريرِ. بالمسيحِ يسوعُ ربُّنا، لأنَّ لَكَ المُلكَ والقوةَ والمجدَ إلى الأبدِ. آمين.',
     },
     {
       'title': 'التحليل',
@@ -1328,7 +1226,7 @@ class _PrayerPageState extends State<PrayerPage>
     {
       'title': 'مز119: اليك يا رب صرخت',
       'body':
-          'إلَيْكَ يا رَبُّ صَرَخْتُ فى حُزْنى، فاسْتَجَبْتَ لى. يا رَبُّ نَجِّ نَفْسى مِنَ الشِّفاهِ الظّالمةِ، ومِنَ اللِّسانِ الغاشِ، ماذا تُعْطَى وماذا تُزادُ أيُّها اللِّسانُ الغاشُّ؟ سِهامُ الأقْوياءِ مُرهَفةٌ مَعَ جَمْر البَرِّيَةِ. ويْلٌ لى فإنَّ غُرْبَتى قَدْ طَالَت عَلَّى، وسَكنْتُ فى مَساكِن قيدار. طَويلاً سَكنَتْ نَفْسى فى الغُرْبَةِ، ومَعَ مُبْغِضى السَّلامِ كُنْتُ صاحِبَ سَلامٍ. وحينَ كُنتُ أُكَلِّمهُم بهِ كانوا يُقاتِلونَنى باطلاً. هَلِّلُويا.',
+          'إلَيْكَ يا رَبُّ صَرَخْتُ فى حُزْنى، فاسْتَجَبْتَ لى. يا رَبُّ نَجِّ نَفْسى مِنَ الشِّفاهِ الظّالمةِ، ومِنَ اللِّسانِ الغاشِ، ماذا تُعْطَى وماذا تُزادُ أيُّها اللِّسانُ الغاشُّ؟ سِهامُ الأقْوياءِ مُرهَفةٌ مَعَ جَمْر البَرِّيَةِ. ويْلٌ لى فإنَّ غُرْبَتى قَدْ طالَت عَلَّى، وسَكنْتُ فى مَساكِن قيدار. طَويلاً سَكنَتْ نَفْسى فى الغُرْبَةِ، ومَعَ مُبْغِضى السَّلامِ كُنْتُ صاحِبَ سَلامٍ. وحينَ كُنتُ أُكَلِّمهُم بهِ كانوا يُقاتِلونَنى باطلاً. هَلِّلُويا.',
     },
     {
       'title': 'مز120: رفعت عيني الي الجبال',
@@ -1388,7 +1286,7 @@ class _PrayerPageState extends State<PrayerPage>
     {
       'title': 'القطعة الثانية',
       'body':
-          'أسْرِعْ لى يا مُخَلِّصَ بِفَتْحِ الأحْضانِ الأَبَوِيَّةِِ، لأنّى أفْنَيْتُ عُمْرى فى اللَّذاتِ والشهَواتِ وقَدْ مَضَى مِنّى النَّهارُ وفاتَ. فالآنَ أتَّكلُ عَلَى غِنَى رَأْفتِكَ الَّتى لا تَفرغُ. فلا تَتَخلَّ عَنْ قَلْبٍ خاشِعٍ مُفْتَقِرٍ لرَحْمتِكَ. لأنّى إليْكَ أصْرُخُ يا رَبُّ بتَخَشُّعٍ: أخْطَأْتُ يا أبَتاهُ فى السَّماءِ وقُدّامِكَ، ولَسْتُ مُسْتحقاً أنْ أُدْعى لَكَ إبْناً بَل إجْعَلَنى كَأحَدِ أُجَرائِك. ( كى نين )',
+          'أسْرِعْ لى يا مُخَلِّصَ بِفَتْحِ الأحْضانِ الأَبَوِيَّةِِ، لأنّى أفْنَيْتُ عُمْرى فى اللَّذاتِ والشهَواتِ وقَدْ مَضَى مِنّى النَّهارُ وفاتَ. فالآنَ أتَّكلُ عَلَى غِنَى رَأْفتِكَ الَّتى لا تَفرغُ. فلا تَتَخلَّ عَنْ قَلْبٍ خاشِعٍ مُفْتَقِرٍ لرَحْمتِكَ. لأنّى إليْكَ أصْرُخُ يا رَبُّ بتَخَشُّعٍ: أخْطَأْتُ يا أبَتاهُ فى السَّماءِ وقُدّامِكَ، ولَسْتُ مُسْتحقاً أنْ أُدْعَى لَكَ إبْناً بَل إجْعَلَنى كَأحَدِ أُجَرائِك. ( كى نين )',
     },
     {
       'title': 'القطعة الثالثة',
@@ -1450,7 +1348,7 @@ class _PrayerPageState extends State<PrayerPage>
     {
       'title': 'مز131: اذكر يارب داود وكل مذلته',
       'body':
-          'اذْكُر يا رَبُّ داوُدَ وكُلّ مَذَلَّتِهِ. كَيْفَ أقْسَمَ للرَّبِّ، ونَذَرَ لإلَهِ يَعْقوبَ: إنّى لا أدْخُل إلَى مَسْكنِ بَيْتى، ولا أصْعَدُ عَلَى سَريرِ فِراشى. ولا أُعْطى نَوْماً لِعَيْنى، ولا نُعاساً لأجْفانى، ولا راحَةَ لصدْغى. إلَى أنْ أجِدَ مَوْضِعاً لِلرَّبِّ، ومَسْكَناً لإلَهِ يَعْقوبَ. ها قَدْ سَمِعْنا بِهِ فى أفْراته، ووَجَدْناهُ فى مَوْضِعِ الغابةِ. لِنَدْخُل إلَى مَساكِنِهِ، ونَسْجدَ فى المَوْضِعِ الَّذى فيهِ إسْتَقَرَّتْ قَدماهُ. قُمْ يا رَبُّ إلَى راحَتكَ، أنْتَ وتابوتُ قُدْسِكَ. كَهَنتُكَ يَلْبَسونَ البِرَّ، وأبْرارُكَ يَبْتهِجونَ. مِنْ أجْلِ داوُدَ عَبدِكَ، لا تَردَّ وَجْهكَ عَنْ مَسيحِكَ. حَلفَ الرَّبُّ لِداوُدَ حَقًّا ولا يُخْلِف، لأجْعَلَنَّ مِنْ ثَمَرَةِ بَطْنِكَ عَلَى كُرْسيكَ. إنْ حَفِظَ بَنوكَ عَهْدى وشَهاداتى الَّتى أُعْلِمهُمْ إيّاها. فَبَنوهُم أيْضاً يَجْلِسونَ إلَى الأبَدِ عَلَى كُرسيكَ. لأنَّ الرَّبَّ اخْتار صِهْيونَ، وَرَضيها مَسْكَناً لَهُ: هَذا هُوَ مَوْضِعُ راحَتى إلَى أَبَدِ الأبَدِ، هَهُنا أسْكُنُ لأنّى أرَدْتُه. لِطَعامِها أُبارِكُ تَبْريكاً، لمَساكينِها أُشْبِعُ خُبْزاً. لكَهَنَتِها أُلْبِسُ الخَلاصَ، وأبْرارُها يَبْتَهِجونَ ابْتِهاجاً. هُناكَ أُقيمُ قَرناً لداوُدَ، هَيأتَ سِراجاً لِمَسيحى. لأعْدائِهِ أُلْبِسُ الخِزْىَ، وعَليْهِ تَزْدهِرُ قَداسَتى. هَلِّلُويا.',
+          'اذْكُر يا رَبُّ داوُدَ وكُلّ مَذَلَّتِهِ. كَيْفَ أقْسَمَ للرَّبِّ، ونَذَرَ لإلَهِ يَعْقوبَ: إنّى لا أدْخُل إلَى مَسْكنِ بَيْتى، ولا أصْعَدُ عَلَى سَريرِ فِراشى. ولا أُعْطى نَوْماً لِعَيْنى، ولا نُعاساً لأجْفانى، ولا راحَةً لصدْغى. إلَى أنْ أجِدَ مَوْضِعاً لِلرَّبِّ، ومَسْكَناً لإلَهِ يَعْقوبَ. ها قَدْ سَمِعْنا بِهِ فى أفْراته، ووَجَدْناهُ فى مَوْضِعِ الغابةِ. لِنَدْخُل إلَى مَساكِنِهِ، ونَسْجدَ فى المَوْضِعِ الَّذى فيهِ إسْتَقَرَّتْ قَدماهُ. قُمْ يا رَبُّ إلَى راحَتكَ، أنْتَ وتابوتُ قُدْسِكَ. كَهَنتُكَ يَلْبَسونَ البِرَّ، وأبْرارُكَ يَبْتهِجونَ. مِنْ أجْلِ داوُدَ عَبدِكَ، لا تَردَّ وَجْهكَ عَنْ مَسيحِكَ. حَلفَ الرَّبُّ لِداوُدَ حَقًّا ولا يُخْلِف، لأجْعَلَنَّ مِنْ ثَمَرَةِ بَطْنِكَ عَلَى كُرْسيكَ. إنْ حَفِظَ بَنوكَ عَهْدى وشَهاداتى الَّتى أُعْلِمهُمْ إيّاها. فَبَنوهُم أيْضاً يَجْلِسونَ إلَى الأبَدِ عَلَى كُرسيكَ. لأنَّ الرَّبَّ اخْتار صِهْيونَ، وَرَضيها مَسْكَناً لَهُ: هَذا هُوَ مَوْضِعُ راحَتى إلَى أَبَدِ الأبَدِ، هَهُنا أسْكُنُ لأنّى أرَدْتُه. لِطَعامِها أُبارِكُ تَبْريكاً، لمَساكينِها أُشْبِعُ خُبْزاً. لكَهَنَتِها أُلْبِسُ الخَلاصَ، وأبْرارُها يَبْتَهِجونَ ابْتِهاجاً. هُناكَ أُقيمُ قَرناً لداوُدَ، هَيأتَ سِراجاً لِمَسيحى. لأعْدائِهِ أُلْبِسُ الخِزْىَ، وعَليْهِ تَزْدهِرُ قَداسَتى. هَلِّلُويا.',
     },
     {
       'title': 'مز132: هوذا ما احسن وما احلى',
@@ -1470,7 +1368,7 @@ class _PrayerPageState extends State<PrayerPage>
     {
       'title': 'مز137: اعترف لك يارب',
       'body':
-          'أعْتَرِفُ لَكَ يا رَبُّ مِنْ كُلِّ قَلْبى، لأنَّكَ إسْتَمعْتَ كُلَّ كَلِماتِ فَمى. أَمامَ الملائِكةِ أُرَتِّلُ لَكَ، وأسْجُدُ قُدّامَ هَيْكَلِكَ المقَدَّسِ، وأعْتَرِفُ لإسْمِكَ عَلَى رَحْمَتِكَ وحَقِّكَ، لأنَّكَ قَدْ عَظَّمْتَ إسْمَكَ القُدّوسَ عَلَى الكُلِّ. اليَومَ الَّذى أدْعوكَ فيهِ أجِبْنى بِسُرْعَةٍ، تُزَوِّدُ نَفْسى كَثيراً بِقُوَّةٍ. فَلْيَعْتَرِفْ لَكَ يا رَبُّ كُلُّ مُلوكِ الأرْضِ، لأنَّهُمْ سَمِعوا سائِرَ كَلِماتِ فَمِكَ. وليسبِّحوا فى طُرُقِ الرَّبِّ لأنَّ مَجْدَ الرَّبّ عَظيمٌ. لأنَّ الرَّبَّ عالٍ ويُعايِنُ المتواضِعينَ، أمّا المتَكبِّرونَ فَيَعْرِفهُم مِنْ بَعْد. إنْ سَلكْت فى وَسَطِ الشِّدَّةِ فَإنَّكَ تُحْيينى، عَلَى رِجْزِ الأعْداءِ مَدَدْتَ يَدَكَ وخَلصتنى يَمينك. الرَّبُّ يُجازى عَنّى. يارَبُّ رَحْمَتُكَ دائِمَةٌ إلَى الأبَدِ، أعْمالُ يَدَيْكَ يا رَبُّ لا تَتْرُكها. هَلِّلُويا.',
+          'أعْتَرِفُ لَكَ يا رَبُّ مِنْ كُلِّ قَلْبى، لأنَّكَ إسْتَمعْتَ كُلَّ كَلِماتِ فَمى. أَمامَ الملائِكةِ أُرَتِّلُ لَكَ، وأسْجُدُ قُدّامَ هَيْكَلِكَ المقَدَّسِ، وأعْتَرِفُ لإسْمِكَ عَلَى رَحْمَتِكَ وحَقِّكَ، لأنَّكَ قَدْ عَظَّمْتَ إسْمَكَ القُدّوسَ عَلَى الكُلِّ. اليَومَ الَّذى أدْعوكَ فيهِ أجِبْنى بِسُرْعَةٍ، تُزَوِّدُ نَفْسى كَثيراً بِقُوَّةٍ. فَلْيَعْتَرِفْ لَكَ يا رَبُّ كُلُّ مُلوكِ الأرْضِ، لأنَّهُمْ سَمِعوا سائِرَ كَلِماتِ فَمِكَ. وليسبِّحوا فى طُرُقِ الرَّبِّ لأنَّ مَجْدَ الرَّبّ عَظيمٌ. لأنَّ الرَّبَّ عالٍ ويُعايِنُ المتواضِعِينَ، أمّا المتَكبِّرونَ فَيَعْرِفهُم مِنْ بَعْد. إنْ سَلكْت فى وَسَطِ الشِّدَّةِ فَإنَّكَ تُحْيينى، عَلَى رِجْزِ الأعْداءِ مَدَدْتَ يَدَكَ وخَلصتنى يَمينك. الرَّبُّ يُجازى عَنّى. يارَبُّ رَحْمَتُكَ دائِمَةٌ إلَى الأبَدِ، أعْمالُ يَدَيْكَ يا رَبُّ لا تَتْرُكها. هَلِّلُويا.',
     },
     {
       'title': 'مز140: يارب اليك صرخت',
@@ -1478,7 +1376,7 @@ class _PrayerPageState extends State<PrayerPage>
           'يا رَبُّ إليْكَ صَرخْتُ فاسْتَمِعْ لى، انْصِتْ إلَى صَوْتِ تَضرُّعى إذا ما صَرخْتُ إليْكَ. لِتَسْتَقِمْ صَلاتى كالْبَخور قُدّامِكَ، ولِيَكُن رَفْعُ يَدىَّ كذبيحَةٍ مَسائِيَّةٍ. ضَعْ يا رَبُّ حافِظًا لِفَمى، وباباً حَصيناً لشَفَتىَّ، ولا تُمِلْ قَلْبى إلَى كَلامِ الشَّرِّ، فَيُمارِسُ الْخَطايا مَعَ أُناسٍ فاعِلى الإثْمِ ولا أشْتَركُ فى ولائِمِهِمْ. فَلْيؤدِّبْنى الصِّدّيقُ برَحْمةٍ ويُوَبِّخنى، أمّا زَيْتُ الخاطئ فَلا يَدْهنُ رَأسى. لأنَّ صَلاتى أيْضًا ضِدَّ رَغَباتِهِم الشِّرّيرَةِ. ذُهِلَ أقْوياؤُهُم عِنْدَ الصَّخْرَةِ، يَسْمَعونَ كَلِماتى اللَّيِّنَةَ، مِثْل شَحْمِ الأرْضِ انْشَقوا عَلَى الأرْضِ. تَبَدَّدَت عِظامُهُمْ عِنْدَ الْجَحيمِ، لأنَّ عُيونَنا إليْكَ يا رَبُّ. يا رَبُّ عَليْكَ تَوكَّلْتُ فَلا تَقْتُل نَفْسى. احْفَظنى مِنَ الفخِّ الَّذى نَصَبوهُ لى، ومِنْ شُكوكِ فاعِلى الإثْمِ. يَسْقُطُ الْخُطاةُ فى شِباكِهِمْ وأكونُ أَنا وَحْدى حَتَّى يَجوز الإثْمُ. هَلِّلُويا.',
     },
     {
-      'title': 'مز141: بصوتى الي الرب صرخت',
+      'title': 'مز141: بصوتي الي الرب صرخت',
       'body':
           'بصَوْتى إلَى الرَّبِّ صَرَخْتُ، بِصَوْتى إلَى الرَّبِّ تَضَرَّعْتُ أسْكُبُ أمامَه تَوَسُّلى، أبُثُّ لَدَيْهِ ضيقى عِنْدَ فَناءِ روحى مِنّى وأنْتَ عَلمت سُبُلى. فى الطَّريقِ الَّذى أسْلُكُ أخْفَوْا لى فَخّاً. تأمَّلْتُ عَنِ اليَمينِ وأبْصَرتُ، فلَمْ يَكُنْ مَنْ يَعْرفنى. ضاعَ الْمَهْرَبُ مِنّى ولَيْسَ مَنْ يَسْألُ عَنْ َنْفسى فَصَرخْتُ إليْكَ يا رَبُّ وقلْتُ: أنْتَ هُوَ رَجائى وحَظّى فى أرْضِ الأحْياءِ. أنْصِتْ إلَى طلبَتى، فإنّى قَدْ تَذلَّلْتُ جِدّاً. نَجِّنى مِنَ الَّذينَ يَضْطَهِدونى، لأنَّهُمْ قَدْ اعْتَزّوا أكثَرَ مِنّى. أَخْرِجْ مِنَ الْحَبْسِ نَفْسى، لِكَى أشْكُرَ إسْمَكَ يا رَبُّ. إيّاى ينْتَظِرُالصِّدّيقونَ حَتَى تُجازينى. هَلِّلُويا.',
     },
@@ -1578,86 +1476,28 @@ class _PrayerPageState extends State<PrayerPage>
   @override
   void initState() {
     super.initState();
-    switch (widget.prayerTime) {
-      case 'صلاة باكر':
-        currentPrayers = bakrPrayers;
-        break;
-      case 'صلاة الغروب':
-        currentPrayers = arbonPrayers;
-        break;
-      case 'صلاة النوم':
-        currentPrayers = nomPrayers;
-        break;
-      default:
-        currentPrayers = bakrPrayers;
-    }
-    _pageController = PageController();
-    _slideController = AnimationController(
-      duration: const Duration(milliseconds: 300),
-      vsync: this,
-    );
-    _slideAnimation =
-        Tween<Offset>(begin: const Offset(0, -1), end: Offset.zero).animate(
-      CurvedAnimation(parent: _slideController, curve: Curves.easeInOut),
-    );
-  }
-
-  @override
-  void dispose() {
-    _pageController.dispose();
-    _slideController.dispose();
-    super.dispose();
-  }
-
-  void _toggleList() {
-    setState(() {
-      _showList = !_showList;
-      if (_showList) {
-        _slideController.forward();
-      } else {
-        _slideController.reverse();
-      }
-    });
-  }
-
-  void _selectPrayer(int index) {
-    setState(() {
-      currentIndex = index;
-      _toggleList();
-    });
-    _pageController.animateToPage(
-      index,
-      duration: const Duration(milliseconds: 500),
-      curve: Curves.easeInOutCubic,
-    );
-  }
-
-  void _nextPage() {
-    if (currentIndex < currentPrayers.length - 1) {
-      _pageController.nextPage(
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
-      );
+    // تحديد قائمة الصلوات بناءً على وقت الصلاة
+    if (widget.prayerTime == 'صلاة باكر') {
+      currentPrayers = bakrPrayers;
+    } else if (widget.prayerTime == 'صلاة الغروب') {
+      currentPrayers = arbonPrayers;
+    } else {
+      currentPrayers = nomPrayers;
     }
   }
 
-  void _previousPage() {
-    if (currentIndex > 0) {
-      _pageController.previousPage(
-        duration: const Duration(milliseconds: 400),
-        curve: Curves.easeInOutCubic,
-      );
+  String _getPrayerBody() {
+    // تجميع كل نصوص الصلوات في نص واحد
+    StringBuffer buffer = StringBuffer();
+    for (var prayer in currentPrayers) {
+      buffer.writeln(prayer['title']);
+      buffer.writeln();
+      buffer.writeln(prayer['body']);
+      buffer.writeln();
+      buffer.writeln('─' * 40);
+      buffer.writeln();
     }
-  }
-
-  void _handleKey(KeyEvent event) {
-    if (event is KeyDownEvent) {
-      if (event.logicalKey == LogicalKeyboardKey.arrowLeft) {
-        _nextPage();
-      } else if (event.logicalKey == LogicalKeyboardKey.arrowRight) {
-        _previousPage();
-      }
-    }
+    return buffer.toString();
   }
 
   @override
@@ -1667,313 +1507,59 @@ class _PrayerPageState extends State<PrayerPage>
 
     return Scaffold(
       backgroundColor: bgColor,
-      body: KeyboardListener(
-        focusNode: _focusNode,
-        autofocus: true,
-        onKeyEvent: _handleKey,
-        child: SafeArea(
-          child: Stack(
-            children: [
-              Column(
+      body: SafeArea(
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+              child: Row(
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 16,
-                    ),
-                    child: Row(
-                      children: [
-                        const Spacer(),
-                        Text(
-                          widget.prayerTime,
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: textColor,
-                          ),
-                        ),
-                        const Spacer(),
-                        MouseRegion(
-                          cursor: SystemMouseCursors.click,
-                          child: GestureDetector(
-                            onTap: () => Navigator.pop(context),
-                            child: Container(
-                              padding: const EdgeInsets.all(12),
-                              decoration: BoxDecoration(
-                                color: widget.isDark
-                                    ? Colors.grey[800]
-                                    : Colors.grey[200],
-                                borderRadius: BorderRadius.circular(15),
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: widget.isDark
-                                        ? Colors.white10
-                                        : Colors.black12,
-                                    blurRadius: 5,
-                                  ),
-                                ],
-                              ),
-                              child: Icon(
-                                Icons.arrow_forward_ios,
-                                color: Colors.blue,
-                                size: 20,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
+                  const Spacer(),
+                  Text(
+                    widget.prayerTime,
+                    style: TextStyle(
+                      fontSize: 24,
+                      fontWeight: FontWeight.bold,
+                      color: textColor,
                     ),
                   ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 24,
-                      vertical: 16,
-                    ),
-                    child: GestureDetector(
-                      onTap: _toggleList,
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 20,
-                          vertical: 12,
-                        ),
-                        decoration: BoxDecoration(
-                          color: widget.isDark
-                              ? Colors.grey[850]
-                              : Colors.grey[100],
-                          borderRadius: BorderRadius.circular(30),
-                          boxShadow: [
-                            BoxShadow(
-                              color: widget.isDark
-                                  ? Colors.white10
-                                  : Colors.black12,
-                              blurRadius: 10,
-                              offset: const Offset(0, 3),
-                            ),
-                          ],
-                        ),
-                        child: Row(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Expanded(
-                              child: Text(
-                                currentPrayers[currentIndex]['title']!,
-                                textAlign: TextAlign.center,
-                                style: TextStyle(
-                                  color: textColor,
-                                  fontSize: widget.fontSize * 0.7,
-                                  fontWeight: FontWeight.bold,
-                                  letterSpacing: 1,
-                                ),
-                              ),
-                            ),
-                            Icon(
-                              _showList
-                                  ? Icons.arrow_drop_up
-                                  : Icons.arrow_drop_down,
-                              color: Colors.blue,
-                              size: 28,
-                            ),
-                          ],
-                        ),
+                  const Spacer(),
+                  GestureDetector(
+                    onTap: () => Navigator.pop(context),
+                    child: Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: widget.isDark ? Colors.grey[800] : Colors.grey[200],
+                        borderRadius: BorderRadius.circular(15),
+                      ),
+                      child: Icon(
+                        Icons.arrow_forward_ios,
+                        color: Colors.blue,
+                        size: 20,
                       ),
                     ),
                   ),
-                  const SizedBox(height: 10),
-                  Expanded(
-                    child: PageView.builder(
-                      controller: _pageController,
-                      reverse: true,
-                      itemCount: currentPrayers.length,
-                      onPageChanged: (index) {
-                        setState(() {
-                          currentIndex = index;
-                        });
-                      },
-                      itemBuilder: (context, index) {
-                        final prayer = currentPrayers[index];
-                        return SingleChildScrollView(
-                          physics: const BouncingScrollPhysics(),
-                          padding: const EdgeInsets.all(24),
-                          child: TweenAnimationBuilder<double>(
-                            key: ValueKey(currentIndex),
-                            tween: Tween<double>(begin: 0, end: 1),
-                            duration: const Duration(milliseconds: 500),
-                            curve: Curves.easeOutCubic,
-                            builder: (context, value, child) {
-                              return Transform.translate(
-                                offset: Offset(0, 20 * (1 - value)),
-                                child: Opacity(
-                                  opacity: value,
-                                  child: Text(
-                                    prayer['body']!,
-                                    textAlign: TextAlign.center,
-                                    style: TextStyle(
-                                      color: textColor,
-                                      fontSize: widget.fontSize,
-                                      height: 1.8,
-                                      letterSpacing: 0.8,
-                                      fontWeight: FontWeight.w400,
-                                    ),
-                                  ),
-                                ),
-                              );
-                            },
-                          ),
-                        );
-                      },
-                    ),
-                  ),
-                  const SizedBox(height: 20),
                 ],
               ),
-              if (_showList)
-                GestureDetector(
-                  onTap: _toggleList,
-                  child: Container(
-                    color: Colors.black54,
-                    child: Center(
-                      child: SlideTransition(
-                        position: _slideAnimation,
-                        child: Material(
-                          color: Colors.transparent,
-                          child: Container(
-                            margin: const EdgeInsets.symmetric(
-                              horizontal: 40,
-                              vertical: 80,
-                            ),
-                            decoration: BoxDecoration(
-                              color: widget.isDark
-                                  ? Colors.grey[900]
-                                  : Colors.white,
-                              borderRadius: BorderRadius.circular(25),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Colors.black26,
-                                  blurRadius: 20,
-                                  offset: const Offset(0, 10),
-                                ),
-                              ],
-                            ),
-                            child: Column(
-                              mainAxisSize: MainAxisSize.min,
-                              children: [
-                                Container(
-                                  padding: const EdgeInsets.all(20),
-                                  decoration: BoxDecoration(
-                                    color: widget.isDark
-                                        ? Colors.grey[800]
-                                        : Colors.grey[100],
-                                    borderRadius: const BorderRadius.only(
-                                      topLeft: Radius.circular(25),
-                                      topRight: Radius.circular(25),
-                                    ),
-                                  ),
-                                  child: Row(
-                                    children: [
-                                      Icon(
-                                        Icons.menu_book,
-                                        color: Colors.blue,
-                                        size: 28,
-                                      ),
-                                      const SizedBox(width: 12),
-                                      Text(
-                                        "قائمة الصلوات",
-                                        style: TextStyle(
-                                          fontSize: 20,
-                                          fontWeight: FontWeight.bold,
-                                          color: textColor,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ),
-                                Expanded(
-                                  child: ListView.builder(
-                                    itemCount: currentPrayers.length,
-                                    itemBuilder: (context, index) {
-                                      final isSelected = currentIndex == index;
-                                      return InkWell(
-                                        onTap: () => _selectPrayer(index),
-                                        child: Container(
-                                          padding: const EdgeInsets.symmetric(
-                                            horizontal: 20,
-                                            vertical: 16,
-                                          ),
-                                          decoration: BoxDecoration(
-                                            color: isSelected
-                                                ? (widget.isDark
-                                                    ? Colors.blue.withOpacity(
-                                                        0.2,
-                                                      )
-                                                    : Colors.blue.shade50)
-                                                : null,
-                                            border: Border(
-                                              bottom: BorderSide(
-                                                color: widget.isDark
-                                                    ? Colors.grey[800]!
-                                                    : Colors.grey[200]!,
-                                              ),
-                                            ),
-                                          ),
-                                          child: Row(
-                                            children: [
-                                              if (isSelected)
-                                                Icon(
-                                                  Icons.check_circle,
-                                                  color: Colors.blue,
-                                                  size: 20,
-                                                )
-                                              else
-                                                const SizedBox(width: 20),
-                                              const SizedBox(width: 12),
-                                              Expanded(
-                                                child: Text(
-                                                  currentPrayers[index]
-                                                      ['title']!,
-                                                  style: TextStyle(
-                                                    fontSize: 16,
-                                                    color: textColor,
-                                                    fontWeight: isSelected
-                                                        ? FontWeight.bold
-                                                        : FontWeight.normal,
-                                                  ),
-                                                ),
-                                              ),
-                                            ],
-                                          ),
-                                        ),
-                                      );
-                                    },
-                                  ),
-                                ),
-                                Container(
-                                  padding: const EdgeInsets.all(16),
-                                  child: ElevatedButton(
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.blue,
-                                      foregroundColor: Colors.white,
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(15),
-                                      ),
-                                    ),
-                                    onPressed: _toggleList,
-                                    child: const Text(
-                                      "إغلاق",
-                                      style: TextStyle(fontSize: 16),
-                                    ),
-                                  ),
-                                ),
-                                const SizedBox(height: 10),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+            ),
+            Expanded(
+              child: SingleChildScrollView(
+                physics: const BouncingScrollPhysics(),
+                padding: const EdgeInsets.all(24),
+                child: Text(
+                  _getPrayerBody(),
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    color: textColor,
+                    fontSize: widget.fontSize,
+                    height: 1.8,
+                    letterSpacing: 0.8,
+                    fontWeight: FontWeight.w400,
                   ),
                 ),
-            ],
-          ),
+              ),
+            ),
+          ],
         ),
       ),
     );
