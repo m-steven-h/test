@@ -4,7 +4,7 @@ workflows:
     environment:
       flutter: stable
     scripts:
-      - name: Build APK
+      - name: Clean and build
         script: |
           flutter clean
           flutter pub get
