@@ -1,12 +1,15 @@
 plugins {
     id "com.android.application"
-    id "kotlin-android"
+    id "org.jetbrains.kotlin.android"
     id "dev.flutter.flutter-gradle-plugin"
 }
 
 android {
     namespace = "com.example.e3dady"
     compileSdk = 34
+
+    // ✅ خلي Flutter يحدد NDK تلقائي (أهم حاجة)
+    ndkVersion = flutter.ndkVersion
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -27,7 +30,10 @@ android {
 
     buildTypes {
         release {
+            // ⚠️ مؤقت لحد ما تضيف keystore
             signingConfig = signingConfigs.debug
+            minifyEnabled false
+            shrinkResources false
         }
     }
 }
@@ -37,5 +43,5 @@ flutter {
 }
 
 dependencies {
-    implementation "androidx.work:work-runtime:2.8.1"
+    implementation "androidx.work:work-runtime-ktx:2.9.0"
 }
