@@ -6,10 +6,10 @@ plugins {
 
 android {
     namespace = "com.example.e3dady"
-    compileSdk = flutter.compileSdkVersion
+    compileSdk = 35  // ✅ حدد رقم ثابت بدل flutter.compileSdkVersion
 
-    // 👇 هنا حدد نسخة NDK يدويًا (الأهم)
-    ndkVersion = "25.2.9519653"
+    // ✅ امسح سطر ndkVersion أو علقه
+    // ndkVersion = "25.2.9519653"
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
@@ -22,10 +22,10 @@ android {
 
     defaultConfig {
         applicationId = "com.example.e3dady"
-        minSdk = flutter.minSdkVersion
-        targetSdk = flutter.targetSdkVersion
-        versionCode = flutter.versionCode
-        versionName = flutter.versionName
+        minSdk = 21
+        targetSdk = 35  // ✅ حدد رقم ثابت
+        versionCode = 1
+        versionName = "1.0.0"
     }
 
     buildTypes {
@@ -37,4 +37,8 @@ android {
 
 flutter {
     source = "../.."
+}
+
+dependencies {
+    implementation "androidx.work:work-runtime:2.8.1"
 }
