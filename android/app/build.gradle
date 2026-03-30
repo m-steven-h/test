@@ -1,34 +1,49 @@
-workflows:
-  android-release:
-    name: Android Release Build
-    max_build_duration: 60
+plugins {
+    id "com.android.application"
+    id "org.jetbrains.kotlin.android"
+    id "dev.flutter.flutter-gradle-plugin"
+}
 
-    environment:
-      flutter: stable
-      java: 17
+android {
+    namespace = "com.example.e3dady"
 
-    scripts:
-      # 🧹 تنظيف المشروع
-      - name: Clean project
-        script: |
-          flutter clean
+    compileSdk = 34
 
-      # 📦 تحميل packages
-      - name: Get dependencies
-        script: |
-          flutter pub get
+    // 🔥 أهم سطر لحل مشاكل NDK
+    ndkVersion = "27.0.12077973"
 
-      # 🔥 إصلاح local.properties (مهم جدًا)
-      - name: Fix local.properties
-        script: |
-          rm -rf android/local.properties
-          echo "flutter.sdk=/usr/local/flutter" > android/local.properties
-          echo "sdk.dir=/usr/local/android-sdk" >> android/local.properties
+    defaultConfig {
+        applicationId = "com.example.e3dady"
+        minSdk = 21
+        targetSdk = 34
+        versionCode = 1
+        versionName = "1.0.0"
+    }
 
-      # ⚙️ Build APK
-      - name: Build APK
-        script: |
-          flutter build apk --release
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
 
-    artifacts:
-      - build/app/outputs/flutter-apk/app-release.apk
+    kotlinOptions {
+        jvmTarget = "17"
+    }
+
+    buildTypes {
+        release {
+            // 🔥 مؤقت لحد ما تضيف keystore
+            signingConfig = signingConfigs.debug
+
+            minifyEnabled false
+            shrinkResources false
+        }
+    }
+}
+
+flutter {
+    source = "../.."
+}
+
+dependencies {
+    implementation "androidx.work:work-runtime-ktx:2.9.0"
+}
