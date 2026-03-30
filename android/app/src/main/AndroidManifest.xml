@@ -1,9 +1,15 @@
 <manifest xmlns:android="http://schemas.android.com/apk/res/android">
     
+    <!-- الأذونات المطلوبة للتطبيق -->
     <uses-permission android:name="android.permission.INTERNET"/>
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED"/>
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
     <uses-permission android:name="android.permission.WAKE_LOCK"/>
+    <uses-permission android:name="android.permission.VIBRATE"/>
+    <uses-permission android:name="android.permission.USE_FULL_SCREEN_INTENT"/>
+    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.USE_EXACT_ALARM"/>
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
     
     <application
         android:label="اعدادي"
@@ -30,6 +36,7 @@
             </intent-filter>
         </activity>
         
+        <!-- خدمة WorkManager لإعادة جدولة الإشعارات بعد إعادة التشغيل -->
         <service
             android:name="androidx.work.impl.background.systemalarm.RescheduleReceiver"
             android:exported="false"/>
@@ -39,9 +46,43 @@
             android:exported="true"
             android:permission="android.permission.BIND_JOB_SERVICE"/>
         
+        <!-- مستقبل البث لإعادة تشغيل WorkManager بعد إقلاع الجهاز -->
         <receiver
             android:name="androidx.work.impl.utils.ForceStopRunnable$BroadcastReceiver"
             android:enabled="true"
+            android:exported="false"/>
+        
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxy$BatteryNotLowProxy"
+            android:exported="false"/>
+        
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxy$StorageNotLowProxy"
+            android:exported="false"/>
+        
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxy$NetworkStateProxy"
+            android:exported="false"/>
+        
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxy$ChargingProxy"
+            android:exported="false"/>
+        
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.RescheduleReceiver"
+            android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED"/>
+                <action android:name="android.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="com.htc.intent.action.QUICKBOOT_POWERON"/>
+                <action android:name="android.intent.action.REBOOT"/>
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED"/>
+            </intent-filter>
+        </receiver>
+        
+        <!-- مستقبل البث لإعادة جدولة الإشعارات بعد تغيير المنطقة الزمنية -->
+        <receiver
+            android:name="androidx.work.impl.background.systemalarm.ConstraintProxy$TimeZoneProxy"
             android:exported="false"/>
         
         <meta-data
