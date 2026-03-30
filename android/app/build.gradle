@@ -1,51 +1,27 @@
-plugins {
-    id "com.android.application"
-    id "org.jetbrains.kotlin.android"
-    id "dev.flutter.flutter-gradle-plugin"
-}
-
-android {
-    namespace = "com.example.e3dady"
-    compileSdk = 36
-
-    ndkVersion = "27.0.12077973"
-
-    defaultConfig {
-        applicationId = "com.example.e3dady"
-        minSdk = 21
-        targetSdk = 36
-        versionCode = 1
-        versionName = "1.0.0"
-    }
-
-    compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_17
-        targetCompatibility = JavaVersion.VERSION_17
-
-        // 🔥 الحل الأساسي
-        coreLibraryDesugaringEnabled true
-    }
-
-    kotlinOptions {
-        jvmTarget = "17"
-    }
-
-    buildTypes {
-        release {
-            signingConfig = signingConfigs.debug
-            minifyEnabled false
-            shrinkResources false
-        }
+buildscript {
+    repositories {
+        google()
+        mavenCentral()
     }
 }
 
-flutter {
-    source = "../.."
+allprojects {
+    repositories {
+        google()
+        mavenCentral()
+    }
 }
 
-dependencies {
-    implementation "androidx.work:work-runtime-ktx:2.9.0"
+rootProject.buildDir = "../build"
 
-    // 🔥 مهم جدًا لحل المشكلة
-    coreLibraryDesugaring "com.android.tools:desugar_jdk_libs:2.0.4"
+subprojects {
+    project.buildDir = "${rootProject.buildDir}/${project.name}"
+}
+
+subprojects {
+    project.evaluationDependsOn(":app")
+}
+
+tasks.register("clean", Delete) {
+    delete rootProject.buildDir
 }
