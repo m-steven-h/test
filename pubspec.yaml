@@ -14,7 +14,7 @@ dependencies:
   cupertino_icons: ^1.0.2
   shared_preferences: ^2.2.0
   flutter_local_notifications: ^18.0.0
-  workmanager: ^0.5.2
+  workmanager: ^0.6.0
   timezone: ^0.10.0
 
 dev_dependencies:
